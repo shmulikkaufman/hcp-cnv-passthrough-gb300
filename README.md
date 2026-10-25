@@ -699,9 +699,21 @@ oc exec -n gpu-vm-test virt-launcher-... -c compute -- \
 
 # Phase 5 — In-guest NVIDIA driver
 
-Inside the VM (RHEL 10.2 ARM64), with the NVIDIA driver repo
-(`rhel-10-for-aarch64-nvidia-rpms`) and CUDA repo (`cuda-rhel10-sbsa`)
-enabled:
+Inside the VM (RHEL 10.2 ARM64). Repo prerequisites — the `rhel4nv` image ships
+these already; on a stock RHEL image:
+
+```bash
+# 1. Public NVIDIA CUDA repo (nvidia-driver*, nvidia-driver-cuda, kmod)
+sudo dnf config-manager --add-repo \
+  https://developer.download.nvidia.com/compute/cuda/repos/rhel10/sbsa/cuda-rhel10.repo
+
+# 2. The rhel-10-for-aarch64-nvidia-rpms driver channel (kmod-nvidia-open-dkms,
+#    nvidia-modprobe, el10nv kernel) comes from a Red Hat subscription
+#    (RHEL for NVIDIA entitlement, in /etc/yum.repos.d/redhat.repo):
+dnf repolist | grep nvidia    # verify it is attached
+```
+
+Then install, pinning kmod and userspace to the same version:
 
 ```bash
 DRIVER_VERSION=615.71.10
