@@ -11,7 +11,7 @@ spec:
   nmStateConfigLabelSelector: {}
   pullSecretRef:
     name: pull-secret
-  sshAuthorizedKey: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICS5eKZo0aBFc0JbS4fP76cCyH+cy0HjSHi9XYeFlMOy nvidia@rh-gb300nvl72-v2-bastion
+  sshAuthorizedKey: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA<replace-with-your-public-key> user@example.com
 # status.isoDownloadURL -> minimal.iso; boot the GB300 worker tray from it.
 # The booted host registers as an Agent in namespace `clusters`; HCP binds it to
 # the NodePool and ignites the node as the guest cluster worker.

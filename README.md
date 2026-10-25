@@ -7,9 +7,9 @@ The setup was built and validated on a GB300 NVL72 system:
 
 | Component | Value |
 |---|---|
-| Hub cluster | OpenShift 5.0.0-rc.6, x86_64, node `control-plane-12` (172.16.2.132) |
+| Hub cluster | OpenShift 5.0.0-rc.6, x86_64, node `hub-node-1` (172.16.2.132) |
 | Guest (hosted) cluster | OpenShift 4.22.0 HCP, Agent platform, multi-arch payload |
-| Guest worker node | `compute-tray-11` (172.16.2.113), RHCOS 9.8, kernel 5.14.0-687, arm64, 4x GB300 |
+| Guest worker node | `gpu-worker-1` (172.16.2.113), RHCOS 9.8, kernel 5.14.0-687, arm64, 4x GB300 |
 | Virtualization | OpenShift Virtualization (CNV) 4.21.17, virt-launcher QEMU 10.1.0 |
 | GPU operator | NVIDIA GPU Operator 26.7.2, vm-passthrough (sandbox) mode |
 | Guest VM | RHEL 10.2 ARM64 (`rhel4nv-26.03-aarch64-kvm.qcow2`), kernel 6.12.0-265.29.el10nv |
@@ -31,7 +31,7 @@ Final result — `nvidia-smi` inside the VM:
 ```text
 x86_64 hub cluster (OpenShift 5.0)
   └─ HostedControlPlane pods (my-hosted-cluster, namespace: clusters)
-       └─ ARM64 guest worker node (compute-tray-11, booted via Agent/discovery ISO)
+       └─ ARM64 guest worker node (gpu-worker-1, booted via Agent/discovery ISO)
             ├─ OpenShift Virtualization (CNV / KubeVirt)
             │    └─ VM gpu-vm (RHEL 10.2 arm64)
             │         └─ GB300 passed through via VFIO/iommufd
@@ -257,7 +257,7 @@ spec:
   nmStateConfigLabelSelector: {}
   pullSecretRef:
     name: pull-secret
-  sshAuthorizedKey: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICS5eKZo0aBFc0JbS4fP76cCyH+cy0HjSHi9XYeFlMOy nvidia@rh-gb300nvl72-v2-bastion
+  sshAuthorizedKey: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA<replace-with-your-public-key> user@example.com
 ```
 
 Download the discovery ISO and boot the GB300 tray from it:
@@ -276,7 +276,7 @@ oc get secret my-hosted-cluster-admin-kubeconfig -n clusters \
 export KUBECONFIG=$PWD/guest-kubeconfig
 oc get nodes
 # NAME             STATUS   ROLES   AGE   VERSION
-# compute-tray-11  Ready    worker  ...   v1.35.8
+# gpu-worker-1  Ready    worker  ...   v1.35.8
 ```
 
 ---
@@ -464,7 +464,7 @@ the GPU operator's sandbox device plugin rather than by KubeVirt itself.
 Verify the resource appears on the node:
 
 ```bash
-oc get node compute-tray-11 -o json | jq '.status.allocatable["nvidia.com/31c2"]'
+oc get node gpu-worker-1 -o json | jq '.status.allocatable["nvidia.com/31c2"]'
 # "4"
 ```
 
@@ -604,7 +604,7 @@ spec:
         kubevirt.io/vm: gpu-vm
     spec:
       nodeSelector:
-        kubernetes.io/hostname: compute-tray-11
+        kubernetes.io/hostname: gpu-worker-1
       domain:
         machine:
           type: virt
@@ -645,7 +645,7 @@ spec:
             #cloud-config
             hostname: gpu-vm
             ssh_authorized_keys:
-            - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICS5eKZo0aBFc0JbS4fP76cCyH+cy0HjSHi9XYeFlMOy nvidia@rh-gb300nvl72-v2-bastion
+            - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA<replace-with-your-public-key> user@example.com
 ```
 
 Notes:
