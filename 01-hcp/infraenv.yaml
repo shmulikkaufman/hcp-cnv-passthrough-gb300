@@ -1,0 +1,17 @@
+# InfraEnv created by `hcp create cluster agent` on the hub (status with signed
+# download URLs removed). The discovery ISO for the ARM64 worker is generated from it.
+apiVersion: agent-install.openshift.io/v1beta1
+kind: InfraEnv
+metadata:
+  name: my-hosted-cluster
+  namespace: clusters
+spec:
+  cpuArchitecture: arm64
+  ipxeScriptType: DiscoveryImageAlways
+  nmStateConfigLabelSelector: {}
+  pullSecretRef:
+    name: pull-secret
+  sshAuthorizedKey: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICS5eKZo0aBFc0JbS4fP76cCyH+cy0HjSHi9XYeFlMOy nvidia@rh-gb300nvl72-v2-bastion
+# status.isoDownloadURL -> minimal.iso; boot the GB300 worker tray from it.
+# The booted host registers as an Agent in namespace `clusters`; HCP binds it to
+# the NodePool and ignites the node as the guest cluster worker.

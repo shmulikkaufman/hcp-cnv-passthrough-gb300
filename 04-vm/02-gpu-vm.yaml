@@ -1,0 +1,70 @@
+# The working GPU VM definition (this exact spec produced a VM whose GB300 runs
+# nvidia-smi successfully).
+#
+# Key points:
+#   - gpus.deviceName nvidia.com/31c2      -> VFIO passthrough of the GB300
+#   - devices.kubevirt.io/iommufd: "1"     -> use the kernel iommufd VFIO container
+#     (needs virt-launcher with libvirt >= 12.2; replaces the legacy type1 fix)
+#   - hookSidecars annotation              -> MMIO window fix, see 04-vm/gpu-mmio-hook.sh
+#     and the ConfigMap 02-gpu-vm-mmio-hook-cm.yaml
+#   - nodeSelector pins to the node that hosts the GPUs
+#   - dedicatedCpuPlacement + QoS Guaranteed (requests == limits) — the VM pins
+#     host CPUs, which avoids cross-NUMA PCIe latency; not strictly required.
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: gpu-vm
+  namespace: gpu-vm-test
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      annotations:
+        hooks.kubevirt.io/hookSidecars: '[{"args":["--version","v1alpha2"],"configMap":{"name":"gpu-mmio-hook","key":"onDefineDomain.sh","hookPath":"/usr/bin/onDefineDomain"}}]'
+      labels:
+        kubevirt.io/domain: gpu-vm
+        kubevirt.io/vm: gpu-vm
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: compute-tray-11
+      domain:
+        machine:
+          type: virt
+        cpu:
+          cores: 2
+          dedicatedCpuPlacement: true
+        resources:
+          requests:
+            memory: 16Gi
+          limits:
+            devices.kubevirt.io/iommufd: "1"
+        memory:
+          guest: 16Gi
+        devices:
+          disks:
+          - name: rootdisk
+            disk:
+              bus: virtio
+          - name: cloudinit
+            disk:
+              bus: virtio
+          interfaces:
+          - name: default
+            masquerade: {}
+          gpus:
+          - name: gpu1
+            deviceName: nvidia.com/31c2
+      networks:
+      - name: default
+        pod: {}
+      volumes:
+      - name: rootdisk
+        dataVolume:
+          name: gpu-vm-rhel-root
+      - name: cloudinit
+        cloudInitNoCloud:
+          userData: |
+            #cloud-config
+            hostname: gpu-vm
+            ssh_authorized_keys:
+            - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICS5eKZo0aBFc0JbS4fP76cCyH+cy0HjSHi9XYeFlMOy nvidia@rh-gb300nvl72-v2-bastion

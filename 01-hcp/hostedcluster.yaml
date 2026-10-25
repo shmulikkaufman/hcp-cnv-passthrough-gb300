@@ -1,0 +1,75 @@
+# Reference HostedCluster produced by `hcp create cluster agent` (status fields and
+# generated secrets removed). The CLI creates this; the manifest is kept for reference.
+apiVersion: hypershift.openshift.io/v1beta1
+kind: HostedCluster
+metadata:
+  name: my-hosted-cluster
+  namespace: clusters
+spec:
+  autoscaling:
+    scaling: ScaleUpAndScaleDown
+  controllerAvailabilityPolicy: SingleReplica
+  dns:
+    # NOTE: must be the hyphenated form; the dotted form 172.16.2.132.sslip.io is
+    # rejected as an invalid DNS label.
+    baseDomain: 172-16-2-132.sslip.io
+  etcd:
+    managed:
+      storage:
+        persistentVolume:
+          size: 8Gi
+          storageClassName: lvms-vg1
+        type: PersistentVolume
+    managementType: Managed
+  fips: false
+  infrastructureAvailabilityPolicy: SingleReplica
+  networking:
+    allocateNodeCIDRs: Disabled
+    clusterNetwork:
+    - cidr: 10.132.0.0/14
+    networkType: OVNKubernetes
+    serviceNetwork:
+    - cidr: 172.31.0.0/16
+  olmCatalogPlacement: management
+  platform:
+    agent:
+      agentNamespace: clusters
+    type: Agent
+  pullSecret:
+    name: my-hosted-cluster-pull-secret
+  release:
+    # Multi-arch payload: control plane pods run on the x86_64 hub, the worker is arm64.
+    image: quay.io/openshift-release-dev/ocp-release:4.22.0-multi
+  secretEncryption:
+    aescbc:
+      activeKey:
+        name: my-hosted-cluster-etcd-encryption-key
+    type: aescbc
+  services:
+  - service: APIServer
+    servicePublishingStrategy:
+      nodePort:
+        address: 172.16.2.132
+      type: NodePort
+  - service: Ignition
+    servicePublishingStrategy:
+      nodePort:
+        address: 172.16.2.132
+      type: NodePort
+  - service: Konnectivity
+    servicePublishingStrategy:
+      nodePort:
+        address: 172.16.2.132
+      type: NodePort
+  - service: OAuthServer
+    servicePublishingStrategy:
+      nodePort:
+        address: 172.16.2.132
+      type: NodePort
+  - service: OIDC
+    servicePublishingStrategy:
+      nodePort:
+        address: 172.16.2.132
+      type: NodePort
+  sshKey:
+    name: my-hosted-cluster-ssh-key

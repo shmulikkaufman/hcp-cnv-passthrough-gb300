@@ -1,0 +1,15 @@
+# Whitelist the GB300 (10de:31c2) as a CNV permitted host device.
+# externalResourceProvider: true — the resource nvidia.com/31c2 is advertised by the
+# GPU operator's sandbox device plugin, not by KubeVirt's own device plugin.
+# Without this, a VM with `gpus: deviceName: nvidia.com/31c2` cannot be scheduled.
+apiVersion: hco.kubevirt.io/v1beta1
+kind: HyperConverged
+metadata:
+  name: kubevirt-hyperconverged
+  namespace: openshift-cnv
+spec:
+  permittedHostDevices:
+    pciHostDevices:
+    - pciDeviceSelector: 10de:31c2
+      resourceName: nvidia.com/31c2
+      externalResourceProvider: true

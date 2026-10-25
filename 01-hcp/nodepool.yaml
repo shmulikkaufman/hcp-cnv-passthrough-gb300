@@ -1,0 +1,28 @@
+# NodePool created by `hcp create cluster agent --node-pool-replicas 1`
+# (status and generated annotations removed).
+apiVersion: hypershift.openshift.io/v1beta1
+kind: NodePool
+metadata:
+  name: my-hosted-cluster
+  namespace: clusters
+spec:
+  arch: arm64
+  clusterName: my-hosted-cluster
+  management:
+    autoRepair: false
+    replace:
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
+      strategy: RollingUpdate
+    upgradeType: InPlace
+  platform:
+    agent: {}
+    type: Agent
+  release:
+    # Multi-arch payload — the node pulls the arm64 half of it. Using the plain
+    # aarch64 image here previously failed ignition payload generation
+    # ("cluster-config-api: cannot execute binary file: Exec format error"),
+    # because the control plane (x86_64) generates the payload.
+    image: quay.io/openshift-release-dev/ocp-release:4.22.0-multi
+  replicas: 1

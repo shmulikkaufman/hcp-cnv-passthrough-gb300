@@ -1,0 +1,27 @@
+# Root disk for the GPU VM, populated by uploading a RHEL 10 (ARM64) KVM guest image.
+# Image used: rhel4nv-26.03-aarch64-kvm.qcow2 (RHEL 10.2 for ARM, "el10nv" kernel).
+#
+# Create + upload:
+#   oc apply -f 01-gpu-vm-root-dv.yaml
+#   UPLOAD_ROUTE=$(oc get route -n cdi cdi-uploadproxy -o jsonpath='{.spec.host}')
+#   virtctl image-upload dv gpu-vm-rhel-root -n gpu-vm-test \
+#     --size=56Gi --storage-class=local-hostpath \
+#     --image-path=rhel4nv-26.03-aarch64-kvm.qcow2 \
+#     --uploadproxy-url=https://$UPLOAD_ROUTE --insecure \
+#     --access-mode=ReadWriteOnce
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: gpu-vm-rhel-root
+  namespace: gpu-vm-test
+spec:
+  contentType: kubevirt
+  source:
+    upload: {}
+  storage:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 56Gi
+    storageClassName: local-hostpath

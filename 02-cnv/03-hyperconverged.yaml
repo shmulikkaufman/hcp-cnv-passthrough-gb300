@@ -1,0 +1,10 @@
+# Applied after the operator is ready (CSV Succeeded).
+# permittedHostDevices is where passthrough devices are whitelisted — it can also be
+# set here, but we apply it in the GPU operator step (03-gpu-operator/04-...) so the
+# resource name matches what the GPU operator's sandbox device plugin advertises.
+apiVersion: hco.kubevirt.io/v1beta1
+kind: HyperConverged
+metadata:
+  name: kubevirt-hyperconverged
+  namespace: openshift-cnv
+spec: {}

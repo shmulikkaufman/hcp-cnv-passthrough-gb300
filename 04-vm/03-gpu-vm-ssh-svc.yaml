@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-vm-ssh
+  namespace: gpu-vm-test
+spec:
+  type: NodePort
+  selector:
+    kubevirt.io/domain: gpu-vm
+  ports:
+  - name: ssh
+    port: 22
+    targetPort: 22
+    nodePort: 30022
+# SSH from the bastion:
+#   ssh -p 30022 cloud-user@<node-ip>

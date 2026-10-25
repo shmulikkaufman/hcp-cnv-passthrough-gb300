@@ -1,0 +1,5 @@
+# secrets - never commit
+pull-secret.json
+*kubeconfig*
+*.qcow2
+*.iso

@@ -1,0 +1,33 @@
+# RBAC for the (legacy) gpu-vfio-type1-fix DaemonSet: privileged SCC access.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gpu-vfio-fixer
+  namespace: nvidia-gpu-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gpu-vfio-fixer
+rules:
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+  - privileged
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gpu-vfio-fixer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gpu-vfio-fixer
+subjects:
+- kind: ServiceAccount
+  name: gpu-vfio-fixer
+  namespace: nvidia-gpu-operator

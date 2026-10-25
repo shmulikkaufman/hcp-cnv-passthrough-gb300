@@ -1,0 +1,91 @@
+# LEGACY WORKAROUND — only needed for virt-launcher builds without native iommufd
+# support (libvirt < 12.2). The current deployment runs the VM with
+# `devices.kubevirt.io/iommufd: "1"` (see 04-vm/02-gpu-vm.yaml), which uses the
+# kernel's iommufd VFIO container directly, making this DaemonSet unnecessary.
+# Kept for reference: on older stacks it (1) loads vfio_iommu_type1, without which
+# /dev/vfio/vfio has no IOMMU models and the VM fails with
+#   "vfio 0009:06:00.0: failed to setup container for group 47: No available IOMMU models"
+# and (2) keeps NVIDIA GPUs bound to vfio-pci out of runtime suspend (a suspended
+# GPU returns garbage on PCI config reads: "Unknown PCI header type 127").
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gpu-vfio-type1-fix
+  namespace: nvidia-gpu-operator
+  labels:
+    app: gpu-vfio-type1-fix
+spec:
+  selector:
+    matchLabels:
+      app: gpu-vfio-type1-fix
+  template:
+    metadata:
+      labels:
+        app: gpu-vfio-type1-fix
+    spec:
+      hostPID: true
+      serviceAccountName: gpu-vfio-fixer
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: vfio-fix
+        image: registry.redhat.io/rhel9/support-tools:latest
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            set -e
+            echo "$(date): Starting GPU VFIO type1 fix"
+            # Load vfio_iommu_type1 module (provides legacy VFIO container)
+            if nsenter -t 1 -m -- /usr/sbin/modprobe vfio_iommu_type1 2>/dev/null; then
+              echo "$(date): Loaded vfio_iommu_type1 module"
+            else
+              echo "$(date): vfio_iommu_type1 already loaded or failed"
+            fi
+            # Verify
+            if nsenter -t 1 -m -- grep -q vfio_iommu_type1 /proc/modules; then
+              echo "$(date): vfio_iommu_type1 is loaded"
+            else
+              echo "$(date): WARNING: vfio_iommu_type1 not loaded"
+            fi
+            # Disable runtime PM for NVIDIA GPUs bound to vfio-pci
+            for dev in $(nsenter -t 1 -m -- ls /sys/bus/pci/drivers/vfio-pci/ 2>/dev/null | grep -E '^[0-9a-f]{4}:' || true); do
+              if nsenter -t 1 -m -- cat /sys/bus/pci/devices/$dev/vendor 2>/dev/null | grep -q 0x10de; then
+                echo on > /host/sys/bus/pci/devices/$dev/power/control 2>/dev/null || true
+                echo "$(date): Set power/control=on for $dev"
+              fi
+            done
+            # Keep running to maintain the fix (re-apply every 60s)
+            while true; do
+              sleep 60
+              # Re-check module
+              if ! nsenter -t 1 -m -- grep -q vfio_iommu_type1 /proc/modules 2>/dev/null; then
+                nsenter -t 1 -m -- /usr/sbin/modprobe vfio_iommu_type1 2>/dev/null || true
+                echo "$(date): Re-loaded vfio_iommu_type1"
+              fi
+              # Re-check power
+              for dev in $(nsenter -t 1 -m -- ls /sys/bus/pci/drivers/vfio-pci/ 2>/dev/null | grep -E '^[0-9a-f]{4}:' || true); do
+                if [ "$(cat /host/sys/bus/pci/devices/$dev/power/runtime_status 2>/dev/null)" = "suspended" ]; then
+                  echo on > /host/sys/bus/pci/devices/$dev/power/control 2>/dev/null || true
+                  echo "$(date): Resumed $dev from suspend"
+                fi
+              done
+            done
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        volumeMounts:
+        - name: host
+          mountPath: /host
+      volumes:
+      - name: host
+        hostPath:
+          path: /
