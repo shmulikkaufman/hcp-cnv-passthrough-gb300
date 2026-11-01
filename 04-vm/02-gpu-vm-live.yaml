@@ -1,0 +1,86 @@
+# LIVE snapshot of the validated VM as running in the cluster (2026-11-01,
+# 2x GB300, CNV 4.22 + AIE): fetched with
+#   oc get vm gpu-vm-rhel-validation -n gpu-vm-test -o yaml
+# Kept as reference of the actually-deployed spec; 02-gpu-vm.yaml is the
+# cleaned-up generic version. Note: NO hookSidecars annotation, and the
+# NUMA/hugepages block that makes AIE generate the vSMMUv3.
+# (metadata timestamps/uids and the last-applied-configuration annotation
+# are stripped for readability.)
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  annotations:
+    kubemacpool.io/transaction-timestamp: "2026-11-01T13:08:28.194752195Z"
+    kubevirt.io/latest-observed-api-version: v1
+    kubevirt.io/storage-observed-api-version: v1
+  finalizers:
+  - kubevirt.io/virtualMachineControllerFinalize
+  generation: 11
+  name: gpu-vm-rhel-validation
+  namespace: gpu-vm-test
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      annotations:
+        kubevirt.io/pci-topology-version: v3
+      labels:
+        kubevirt.io/domain: gpu-vm-rhel-validation
+        kubevirt.io/vm: gpu-vm-rhel-validation
+    spec:
+      architecture: arm64
+      domain:
+        cpu:
+          cores: 2
+          dedicatedCpuPlacement: true
+          numa:
+            guestMappingPassthrough: {}
+        devices:
+          disks:
+          - disk:
+              bus: virtio
+            name: rootdisk
+          - disk:
+              bus: virtio
+            name: cloudinit
+          gpus:
+          - deviceName: nvidia.com/31c2
+            name: gpu0
+          - deviceName: nvidia.com/31c2
+            name: gpu1
+          interfaces:
+          - macAddress: 02:75:a5:bf:cc:f1
+            masquerade: {}
+            name: default
+        firmware:
+          serial: 9b92b7cc-932e-4a07-9caa-fed8565db80e
+          uuid: ccdd219d-ae7b-47d6-bfd3-4ebac3bd5991
+        machine:
+          type: virt
+        memory:
+          guest: 16Gi
+          hugepages:
+            pageSize: 2Mi
+        resources:
+          limits:
+            devices.kubevirt.io/iommufd: "1"
+          requests:
+            memory: 16Gi
+      networks:
+      - name: default
+        pod: {}
+      nodeSelector:
+        kubernetes.io/hostname: compute-tray-11
+      volumes:
+      - dataVolume:
+          name: gpu-vm-rhel-validation-root
+        name: rootdisk
+      - cloudInitNoCloud:
+          userData: |
+            #cloud-config
+            hostname: gpu-vm-rhel-validation
+            ssh_authorized_keys:
+            - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICS5eKZo0aBFc0JbS4fP76cCyH+cy0HjSHI9XYeFlMOy nvidia@rh-gb300nvl72-v2-bastion
+            - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOW7RGJDom2wvSNE4vcEt5ynRG8ODTVs7hUku6L/gENS nvidia@rh-gb300nvl72-v2-bastion
+            - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDdP+8uKSY54qGEyvY8QHsoLvfzM1DNOv3TAZLoV1V81D/d9+0WoLyx/nel3cRIC0hHuPjlUoQ3T8McJPniGgkkB+dHB5DMg1PX+X5HcNZHivrgt4dB6L1KTR4d4F7vv/JAOTLe0FZoMe/IoQ/g0IK8V9lIwyqCjZl7n+cfUSsfvvjwBJhbzSrvyXidyceD9YpGzpqrFAeAlATn2ntmvWcc2P0bUxp3vu5s0zUnyiKmuZDzozpqOHPgzhygMi2JjUkp6iGGtMPMB2rsLmU+6I8MUXR3A/7S5nw9ViCy8rbJU1hO5DU/GRUU8cjAJn4DefM7ZrX+tisESffb8elkq0ZU1JbCofJ7lKAqUrcbstfsQc5xoIlIwBUcIC2PlY+Z35ZC0O/d7Xl3kMjNMhIN44iDPlU0QsrDvX6afQAQQCATUtaF8kBiaWv4jOQ3WV8CI1zQxvipyCcLkdV8t7bcWrQCsYHpe7xfw99X4XmwpZetDeGKPUjmln4+yE1qoZ984nvEkZquPhRZZXkHZxAGBxTQi0Lr7HzjgEDj33lBSBfPcb7vEshdnz6yOsk69TYySURvEKMLOHqqvip/Mqzo107TrbWXpkqQPV3bpgJGtwd+ZYkw4zEWrbhP0E7QQZ7EOifaH7fWYMDSeqzvJTUyqcytI6qyPfYJwgwiAgZCeX2tVQ==
+        name: cloudinit

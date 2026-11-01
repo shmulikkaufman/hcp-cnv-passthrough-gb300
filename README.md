@@ -3,48 +3,62 @@
 End-to-end reference for running an NVIDIA GB300 (Grace-Blackwell) GPU inside a
 KubeVirt virtual machine on a hosted (HCP / HyperShift) OpenShift cluster.
 
-The setup was built and validated on a GB300 NVL72 system:
+The setup was built and validated on a GB300 NVL72 system. Last fully
+re-validated **2026-11-01**: `nvidia-smi` detects the GPU, the CUDA driver API
+works (`cuInit`/`cuCtxCreate`/`cuMemAlloc`), and cuda-samples `deviceQuery` +
+`vectorAdd` build and run for `sm_103` inside the VM.
 
 | Component | Value |
 |---|---|
 | Hub cluster | OpenShift 5.0.0-rc.6, x86_64, node `hub-node-1` (172.16.2.132) |
-| Guest (hosted) cluster | OpenShift 4.22.0 HCP, Agent platform, multi-arch payload |
-| Guest worker node | `gpu-worker-1` (172.16.2.113), RHCOS 9.8, kernel 5.14.0-687, arm64, 4x GB300 |
-| Virtualization | OpenShift Virtualization (CNV) 4.21.17, virt-launcher QEMU 10.1.0 |
+| Guest (hosted) cluster | OpenShift 4.22.19 HCP, Agent platform, multi-arch payload |
+| Guest worker node | `compute-tray-11` (172.16.2.113), RHCOS 10.2 + RHEL4NV `kernel-64k-core-6.12.0-259.26.el10nv` (64 KiB pages), arm64, 4x GB300 |
+| Virtualization | OpenShift Virtualization (CNV) 4.22.12 **+ AIE** (webhook, iommufd device plugin, `virt-launcher-4-nv-rhel10`) |
 | GPU operator | NVIDIA GPU Operator 26.7.2, vm-passthrough (sandbox) mode |
-| Guest VM | RHEL 10.2 ARM64 (`rhel4nv-26.03-aarch64-kvm.qcow2`), kernel 6.12.0-265.29.el10nv |
-| Guest driver | NVIDIA open kernel modules 615.71.10 |
+| Guest VM | RHEL 10.2 ARM64 (`rhel4nv-26.03-aarch64-kvm.qcow2`), kernel 6.12.0-259.26.el10nv, 64 KiB pages |
+| Guest driver | NVIDIA open kernel modules 615.71.10 + CUDA toolkit 13.4 |
 
-Final result — `nvidia-smi` inside the VM:
+Final result — `nvidia-smi` inside the VM (2026-11-01):
 
 ```
 +-----------------------------------------------------------------------------------------+
 | NVIDIA-SMI 615.71.10              KMD Version: 615.71.10     CUDA UMD Version: 13.4     |
-+=========================================+========================================+======+
-|   0  NVIDIA GB300                   On  |       00000000:0A:00.0 Off |                    0 |
-| N/A   29C    P0            180W / 1400W |       0MiB / 284208MiB |      0%      Default |
++-----------------------------------------+----------------------------------------+------+
+|   0  NVIDIA GB300                   On  |       00000000:FF:00.0 Off |                    0 |
+| N/A   31C    P0            246W / 1400W |       0MiB / 284208MiB |      0%      Default |
 +-----------------------------------------------------------------------------------------+
 ```
+
+> **CNV 4.22 migration warning:** two workarounds from the CNV 4.21 stack —
+> the MMIO-window hook sidecar (Phase 4.3) and the guest
+> `RMForceBarPath=1` modprobe option (Phase 5.2) — are **actively harmful**
+> on CNV 4.22 + AIE and were the root cause of weeks of
+> `kbusVerifyBar2_GH100: MMUTest BAR0 window … returned garbage 0x0`
+> failures. Both sections below are kept for historical reference only and
+> marked ⚠️ LEGACY. Do **not** apply them on 4.22+.
 
 ## Architecture
 
 ```text
 x86_64 hub cluster (OpenShift 5.0)
   └─ HostedControlPlane pods (my-hosted-cluster, namespace: clusters)
-       └─ ARM64 guest worker node (gpu-worker-1, booted via Agent/discovery ISO)
-            ├─ OpenShift Virtualization (CNV / KubeVirt)
-            │    └─ VM gpu-vm (RHEL 10.2 arm64)
+       └─ ARM64 guest worker node (compute-tray-11, booted via Agent/discovery ISO,
+            RHCOS 10.2 + RHEL4NV kernel-64k-core 6.12.0-259.26.el10nv)
+            ├─ OpenShift Virtualization (CNV 4.22 / KubeVirt + AIE)
+            │    └─ VM gpu-vm (RHEL 10.2 arm64, 64 KiB pages)
             │         └─ GB300 passed through via VFIO/iommufd
-            │              ├─ 16 TiB guest PCI MMIO window (hook sidecar)
-            │              └─ NVIDIA driver 615.71.10 + RMForceBarPath=1
+            │              ├─ AIE-generated: vSMMUv3 (accel/ATS/PASID),
+            │              │  iommufd FD, GPU NUMA nodes 1-8, pcihole64 2 TiB
+            │              └─ NVIDIA driver 615.71.10 (coherent path — no regkeys)
             └─ NVIDIA GPU operator (vm-passthrough mode)
-                 ├─ vfio-manager: binds GB300s to vfio-pci
+                 ├─ vfio-manager: binds GB300s to nvgrace_gpu_vfio_pci
                  └─ sandbox-device-plugin: advertises nvidia.com/31c2
 ```
 
 Division of labor for GPU passthrough:
 
-* **GPU operator (node side)** — binds the GPU to `vfio-pci` and advertises it as
+* **GPU operator (node side)** — binds the GPU to `nvgrace_gpu_vfio_pci` (the
+  Grace/Blackwell VFIO variant driver) and advertises it as
   the extended resource `nvidia.com/31c2` so KubeVirt can schedule a VM with it.
   It deliberately installs **no node driver** in vm-passthrough mode.
 * **Everything inside the VM** — kernel driver, userspace tools — is manual
@@ -59,10 +73,11 @@ Division of labor for GPU passthrough:
   hostedcluster.yaml             resulting HostedCluster (reference)
   nodepool.yaml                  resulting NodePool (reference)
   infraenv.yaml                  discovery ISO environment (reference)
-02-cnv/                          OpenShift Virtualization operator + HyperConverged
+02-cnv/                          OpenShift Virtualization operator + HyperConverged + AIE
 03-gpu-operator/                 GPU operator, vm-passthrough policy, CNV device whitelist
-04-vm/                           The GPU VM: DataVolume, VM, hook sidecar, SSH service
-05-guest-driver/                 In-guest NVIDIA driver + ARM64-specific fixes
+04-vm/                           The GPU VM: DataVolume, VM, SSH service
+05-guest-driver/                 In-guest NVIDIA driver install
+06-cuda-test/                    CUDA validation: driver-API probe + cuda-samples build/run
 scripts/                         Environment helpers
 ```
 
@@ -276,7 +291,7 @@ oc get secret my-hosted-cluster-admin-kubeconfig -n clusters \
 export KUBECONFIG=$PWD/guest-kubeconfig
 oc get nodes
 # NAME             STATUS   ROLES   AGE   VERSION
-# gpu-worker-1  Ready    worker  ...   v1.35.8
+# compute-tray-11  Ready    worker  ...   v1.36.3
 ```
 
 ---
@@ -318,7 +333,7 @@ spec:
   name: kubevirt-hyperconverged
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-  startingCSV: kubevirt-hyperconverged-operator.v4.21.17
+  startingCSV: kubevirt-hyperconverged-operator.v4.22.12
 ```
 
 Wait for the CSV to report Succeeded, then create the HyperConverged CR:
@@ -338,6 +353,62 @@ oc apply -f 02-cnv/
 oc get csv -n openshift-cnv           # Succeeded
 oc get pods -n openshift-cnv | head   # virt-operator, virt-handler, cdi, etc.
 ```
+
+## 2.1 Enable AIE (mandatory for GB300 passthrough on CNV 4.22)
+
+AIE (Accelerated Infrastructure Enablement) provides the NVIDIA-tuned
+virt-launcher, the IOMMUFD device plugin and the SMMUv3/NUMA generation that
+GB300 passthrough depends on. Without it the standard launcher cannot lay out
+the GPU correctly.
+
+```bash
+oc annotate hyperconverged kubevirt-hyperconverged -n openshift-cnv \
+  hco.kubevirt.io/deployAIE=true
+```
+
+Verify the AIE operands:
+
+```bash
+oc get deployment kubevirt-aie-webhook -n openshift-cnv
+oc get daemonset iommufd-device-plugin -n openshift-cnv
+```
+
+Configure the AIE launcher image selection — extract the NV launcher from the
+installed CSV and wire it into the webhook's ConfigMap
+(`02-cnv/04-aie-launcher-config.yaml`):
+
+```bash
+CSV=$(oc get csv -n openshift-cnv -o name | grep kubevirt-hyperconverged-operator | sed 's|.*/||')
+LAUNCHER_NV_IMAGE=$(oc get csv $CSV -n openshift-cnv -o json \
+  | jq -r '.spec.relatedImages[] | select(.name | test("virt-launcher-4-nv")) | .image')
+```
+
+```yaml
+# 02-cnv/04-aie-launcher-config.yaml (substitute ${LAUNCHER_NV_IMAGE})
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubevirt-aie-launcher-config
+  namespace: openshift-cnv
+data:
+  config.yaml: |
+    rules:
+    - name: "nvidia-gpu-launcher"
+      image: "${LAUNCHER_NV_IMAGE}"
+      selector:
+        deviceNames:
+        - "nvidia.com/31c2"
+    - name: "labeled-vms"
+      image: "${LAUNCHER_NV_IMAGE}"
+      selector:
+        vmLabels:
+          matchLabels:
+            aie.kubevirt.io/launcher: "true"
+```
+
+Rules are evaluated in order; the first match wins. A VM requesting
+`nvidia.com/31c2` is mutated to the NV launcher automatically — no VM label
+required (the label rule is a fallback for VMs without GPU resources).
 
 ---
 
@@ -464,7 +535,7 @@ the GPU operator's sandbox device plugin rather than by KubeVirt itself.
 Verify the resource appears on the node:
 
 ```bash
-oc get node gpu-worker-1 -o json | jq '.status.allocatable["nvidia.com/31c2"]'
+oc get node compute-tray-11 -o json | jq '.status.allocatable["nvidia.com/31c2"]'
 # "4"
 ```
 
@@ -500,7 +571,7 @@ metadata:
 ## 4.2 Root disk (DataVolume + image upload)
 
 The guest OS is a RHEL 10 ARM64 KVM image (`rhel4nv-26.03-aarch64-kvm.qcow2`,
-kernel `6.12.0-265.29.el10nv`). Create the DataVolume and upload the qcow2:
+kernel `6.12.0-259.26.el10nv`). Create the DataVolume and upload the qcow2:
 
 ```yaml
 # 04-vm/01-gpu-vm-root-dv.yaml
@@ -523,22 +594,38 @@ spec:
 ```
 
 ```bash
-UPLOAD_ROUTE=$(oc get route -n cdi cdi-uploadproxy -o jsonpath='{.spec.host}')
+UPLOAD_ROUTE=$(oc get route -n openshift-cnv cdi-uploadproxy -o jsonpath='{.spec.host}')
 virtctl image-upload dv gpu-vm-rhel-root -n gpu-vm-test \
   --size=56Gi --storage-class=local-hostpath \
-  --image-path=rhel4nv-26.03-aarch64-kvm.qcow2 \
+  --image-path="$PWD/rhel4nv-26.03-aarch64-kvm.qcow2" \
   --uploadproxy-url=https://$UPLOAD_ROUTE --insecure \
   --access-mode=ReadWriteOnce
 ```
 
-## 4.3 MMIO window hook sidecar (the ARM64 + huge-BAR fix)
+Upload gotchas (all hit in practice — see the troubleshooting table):
+`--image-path` must be an **absolute path** (`virtctl` does not expand `~` or
+relative paths reliably), the `cdi-uploadproxy` route lives in
+`openshift-cnv` (not `cdi`), and with static local PVs the backing host
+directories need `chown 107:107` + `chcon -t container_file_t`, with the PV
+sized ~15% above the DataVolume request (CDI adds filesystem overhead).
 
-The GB300 exposes ~520 GiB of PCI BARs (BAR2 = 512 GiB via Resizable BAR).
-The QEMU `virt` machine's default 64-bit MMIO window is only 512 GiB, so the
-guest kernel cannot assign the BARs and the NVIDIA driver fails with
-`NVRM: BAR0 is 0M @ 0x0`.
+## 4.3 ⚠️ LEGACY — MMIO window hook sidecar (CNV 4.21 only; HARMFUL on 4.22)
 
-Deploy the hook as a ConfigMap — `04-vm/gpu-mmio-hook.sh`:
+> **Do not deploy this on CNV 4.22 + AIE.** AIE sizes the guest PCI window
+> natively (`pcihole64` = 2 TiB, visible in the live domain XML) and lays out
+> the GB300's BARs and coherent-memory description itself. The hook's
+> `-machine highmem-mmio-size=16T` override arrives *after* AIE's calculation
+> and corrupts that layout: the guest driver then fails with
+> `kbusVerifyBar2_GH100: MMUTest BAR0 window offset 0x70e000 returned garbage 0x0`
+> and `RmInitAdapter failed (0x24:0x72:1298)`. This was one of the two root
+> causes of the 4.22 regression (the other: Phase 5.2 `RMForceBarPath`).
+
+Historical context (CNV 4.21, QEMU without AIE): the GB300 exposes ~520 GiB
+of PCI BARs (BAR2 = 512 GiB via Resizable BAR) while the QEMU `virt` machine's
+default 64-bit MMIO window is only 512 GiB, so the guest kernel could not
+assign the BARs and the NVIDIA driver failed with `NVRM: BAR0 is 0M @ 0x0`.
+The hook below was the workaround. Kept for reference only —
+`04-vm/gpu-mmio-hook.sh`:
 
 ```bash
 oc -n gpu-vm-test create configmap gpu-mmio-hook \
@@ -585,7 +672,8 @@ printf '%s\n' "$domain"
 
 ## 4.4 The VM
 
-`04-vm/02-gpu-vm.yaml` — the exact spec that works:
+`04-vm/02-gpu-vm.yaml` — the exact spec that works on CNV 4.22 + AIE
+(validated 2026-11-01):
 
 ```yaml
 apiVersion: kubevirt.io/v1
@@ -597,20 +685,21 @@ spec:
   runStrategy: Always
   template:
     metadata:
-      annotations:
-        hooks.kubevirt.io/hookSidecars: '[{"args":["--version","v1alpha2"],"configMap":{"name":"gpu-mmio-hook","key":"onDefineDomain.sh","hookPath":"/usr/bin/onDefineDomain"}}]'
       labels:
         kubevirt.io/domain: gpu-vm
         kubevirt.io/vm: gpu-vm
     spec:
+      architecture: arm64
       nodeSelector:
-        kubernetes.io/hostname: gpu-worker-1
+        kubernetes.io/hostname: compute-tray-11
       domain:
         machine:
           type: virt
         cpu:
           cores: 2
           dedicatedCpuPlacement: true
+          numa:
+            guestMappingPassthrough: {}
         resources:
           requests:
             memory: 16Gi
@@ -618,6 +707,8 @@ spec:
             devices.kubevirt.io/iommufd: "1"
         memory:
           guest: 16Gi
+          hugepages:
+            pageSize: 2Mi
         devices:
           disks:
           - name: rootdisk
@@ -653,10 +744,17 @@ Notes:
 * `devices.kubevirt.io/iommufd: "1"` makes virt-launcher use the kernel iommufd
   VFIO container (requires a libvirt >= 12.2 build) — this is what obsoletes
   the Phase 3.4 type1 workaround.
-* `gpus: deviceName: nvidia.com/31c2` is the passthrough request.
-* The hook annotation must reference the ConfigMap from 4.3.
-* Changing the hook or any qemu-level option requires a full VM stop/start —
-  the QEMU command line is fixed for the life of the process.
+* `gpus: deviceName: nvidia.com/31c2` is the passthrough request; the AIE
+  webhook (rule from 2.1) swaps the launcher to `virt-launcher-4-nv-rhel10`.
+* `cpu.numa.guestMappingPassthrough` + `dedicatedCpuPlacement` +
+  `memory.hugepages` are required for AIE to generate the vSMMUv3
+  (`accel=on ats=on ssidSize=20 oas=48`), the GPU ACPI NUMA nodes (1-8) and
+  hugepage-backed memfd memory. Without the NUMA/hugepage block AIE skips
+  the SMMUv3 device entirely.
+* **No hook sidecar annotation** — see 4.3. On 4.22 AIE computes the PCI
+  window (`pcihole64` = 2 TiB) itself.
+* Any qemu-level change requires a full VM stop/start — the QEMU command
+  line is fixed for the life of the process.
 
 ## 4.5 SSH access
 
@@ -699,94 +797,330 @@ oc exec -n gpu-vm-test virt-launcher-... -c compute -- \
 
 # Phase 5 — In-guest NVIDIA driver
 
-Inside the VM (RHEL 10.2 ARM64). Repo prerequisites — the `rhel4nv` image ships
-these already; on a stock RHEL image:
+Inside the VM (RHEL 10.2 ARM64, 64 KiB pages). On the clean
+`rhel4nv-26.03-aarch64-kvm.qcow2` image, register and attach the repos first
+(a stock RHEL image also needs the CUDA repo in step 2):
 
 ```bash
-# 1. Public NVIDIA CUDA repo (nvidia-driver*, nvidia-driver-cuda, kmod)
+# 0. Register (RHEL for NVIDIA entitlement; kernel/driver channel comes from here)
+sudo subscription-manager register --org=<org> --activationkey=<key>
+sudo subscription-manager repos --enable=rhel-10-for-aarch64-nvidia-rpms
+
+# 1. CRB + EPEL (dkms, egl-* build dependencies of the driver packages)
+sudo subscription-manager repos --enable=codeready-builder-for-rhel-10-aarch64-rpms
+sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+
+# 2. Public NVIDIA CUDA repo (nvidia-driver*, nvidia-driver-cuda, kmod)
 sudo dnf config-manager --add-repo \
   https://developer.download.nvidia.com/compute/cuda/repos/rhel10/sbsa/cuda-rhel10.repo
-
-# 2. The rhel-10-for-aarch64-nvidia-rpms driver channel (kmod-nvidia-open-dkms,
-#    nvidia-modprobe, el10nv kernel) comes from a Red Hat subscription
-#    (RHEL for NVIDIA entitlement, in /etc/yum.repos.d/redhat.repo):
-dnf repolist | grep nvidia    # verify it is attached
 ```
 
-Then install, pinning kmod and userspace to the same version:
+Then install, pinning kmod, userspace **and kernel-devel to the running
+kernel** (otherwise dnf pulls a newer `kernel-core` and DKMS builds for the
+wrong kernel):
 
 ```bash
 DRIVER_VERSION=615.71.10
+KERNEL_VERSION=$(uname -r | sed 's/+64k//')   # e.g. 6.12.0-259.26.el10nv
 
-# Kernel module + base userspace
-sudo dnf install -y kmod-nvidia-open-dkms-${DRIVER_VERSION} \
-                    nvidia-driver-${DRIVER_VERSION} \
-                    nvidia-modprobe-${DRIVER_VERSION}
+sudo dnf install -y \
+  kernel-64k-devel-${KERNEL_VERSION} \
+  kernel-devel-matched-${KERNEL_VERSION} \
+  kmod-nvidia-open-dkms-${DRIVER_VERSION} \
+  nvidia-driver-${DRIVER_VERSION} \
+  nvidia-modprobe-${DRIVER_VERSION}
 
 # nvidia-smi ships here (NOT in nvidia-driver or the kmod package)
 sudo dnf install -y nvidia-driver-cuda-${DRIVER_VERSION}
+
+sudo reboot    # let DKMS module load on a fresh boot
 ```
 
 Version pinning matters: the kmod and userspace versions must match exactly.
+Verify after reboot: `sudo dkms status` should show
+`nvidia/615.71.10, 6.12.0-259.26.el10nv.aarch64: installed`.
 
-## 5.1 Fix 1 — guest PCI MMIO window (applied in Phase 4.3)
+## 5.1 ⚠️ LEGACY — guest PCI MMIO window (CNV 4.21 only; see Phase 4.3)
 
-If BARs cannot be assigned you will see, inside the VM:
+On CNV 4.21 (no AIE), if BARs cannot be assigned you will see, inside the VM:
 
 ```text
 pci 0000:0a:00.0: BAR 2 [mem size 0x8000000000 64bit pref]: can't assign; no space
 NVRM: This PCI I/O region assigned to your NVIDIA device is invalid:
 NVRM: BAR0 is 0M @ 0x0 (PCI:0000:0a:00.0)
-nvidia 0000:0a:00.0: probe with driver nvidia failed with error -1
 ```
 
-That is the symptom of the missing `highmem-mmio-size` machine property — see
-Phase 4.3. Verify in the guest after boot:
+That was the symptom of the missing `highmem-mmio-size` machine property —
+fixed by the hook sidecar in Phase 4.3. **On CNV 4.22 + AIE do not apply that
+hook**: AIE sizes the window natively and the hook breaks GPU init (see 4.3).
+On 4.22, verify in the guest after boot:
 
 ```bash
-sudo dmesg | grep "0a:00.0.*assigned"      # all three BARs assigned
-sudo lspci -vvv -s 0a:00.0 | grep Region   # non-empty Region lines
+sudo dmesg | grep "ff:00.0.*assigned"      # all three BARs assigned
+sudo lspci -vvv -s ff:00.0 | grep Region   # non-empty Region lines
 ```
 
-## 5.2 Fix 2 — RMForceBarPath (Grace C2C coherent link)
+## 5.2 ⚠️ LEGACY — RMForceBarPath (CNV 4.21 only; HARMFUL on 4.22)
 
-With BARs assigned, the driver still fails on a Grace host because the RM
-expects the GPU's coherent (NVLink-C2C) memory window to be described by
-platform firmware (ACPI DSD) — which a VM does not have:
+On CNV 4.21 the driver failed even with BARs assigned, because the RM expects
+the GPU's coherent (NVLink-C2C) memory window to be described by platform
+firmware (ACPI DSD) — which a 4.21 VM does not have:
 
 ```text
 NVRM: GPU0 kmemsysSetupCoherentCpuLink_IMPL: Failed to get coherent GPU memory base address
 NVRM: GPU0 RmInitNvDevice: *** Cannot initialize the device
 ```
 
-The driver's escape hatch is the `RMForceBarPath` registry key ("disable
-coherent path CPU->Nvlink/C2C->FB and force BAR path",
-`src/nvidia/interface/nvrm_registry.h` in open-gpu-kernel-modules):
+The escape hatch was the `RMForceBarPath` registry key ("disable coherent
+path CPU->Nvlink/C2C->FB and force BAR path"):
 
 ```bash
-# 05-guest-driver/nvidia-forcebarpath.conf -> /etc/modprobe.d/
+# 05-guest-driver/nvidia-forcebarpath.conf -> /etc/modprobe.d/   (4.21 ONLY)
 echo 'options nvidia NVreg_RegistryDwords="RMForceBarPath=1"' | \
   sudo tee /etc/modprobe.d/nvidia-forcebarpath.conf
-
-sudo reboot    # required — see warning below
+sudo reboot
 ```
 
-**Warning:** do not attempt `modprobe -r nvidia` to reload after a failed
-probe — the unload hangs in this state. Reboot the guest.
-
-After reboot, success looks like:
+**Do not use this on CNV 4.22 + AIE.** The 4.22 NV launcher provides the
+coherent-memory description, and forcing the BAR path instead sends the
+driver into the failing `kbusVerifyBar2_GH100` BAR0-window test:
 
 ```text
-NVRM: GPU0 kmemsysSetupCoherentCpuLink_IMPL: Force disabling NVLINK/C2C mappings through regkey.
+NVRM: GPU0 kbusVerifyBar2_GH100: MMUTest BAR0 window offset 0x70e000 returned garbage 0x0
+NVRM: GPU0 RmInitNvDevice: *** Cannot initialize the device
+NVRM: GPU 0000:ff:00.0: RmInitAdapter failed! (0x24:0x72:1298)
+```
+
+This was the second root cause of the 4.22 regression. If the file exists,
+remove it and reboot:
+
+```bash
+sudo rm -f /etc/modprobe.d/nvidia-forcebarpath.conf && sudo reboot
+```
+
+**Warning (applies to any failed probe):** do not attempt `modprobe -r
+nvidia` to reload after a failed probe — the unload hangs. Reboot the guest.
+
+On 4.22 a successful boot logs simply:
+
+```text
 NVRM: loading NVIDIA UNIX Open Kernel Module for aarch64  615.71.10  Release Build
 ```
+
+with **no** `kmemsysSetupCoherentCpuLink` and **no** `kbusVerifyBar2` errors.
 
 ## 5.3 Verify
 
 ```bash
 nvidia-smi
-lspci -nnk -s 0a:00.0 | grep "Kernel driver in use"   # nvidia
+lspci -nnk -s ff:00.0 | grep "Kernel driver in use"   # nvidia
 ```
+
+---
+
+# Phase 6 — CUDA validation inside the VM
+
+Tooling lives in `06-cuda-test/` (see its README). All examples below are the
+**actual commands and outputs from the validated 2026-11-01 run** on
+`gpu-vm-rhel-validation` (RHEL 10.2, driver 615.71.10, CUDA 13.4, GB300
+`sm_103`), run over the NodePort SSH from the bastion.
+
+## 6.1 Driver-API probe (no toolkit needed)
+
+```bash
+# copy 06-cuda-test/cuda-driver-probe.py into the VM (scp -P 30023 ...) or
+# paste it into a file there, then:
+python3 cuda-driver-probe.py
+```
+
+Actual output:
+
+```text
+cuInit: 0 CUDA_SUCCESS
+cuDeviceGetCount: 0 count: 1
+Device 0: NVIDIA GB300 total mem: 283301 MiB
+cuCtxCreate: 0
+cuMemAlloc(256MiB): 0 ptr: 0xfffb80000000
+cuMemFree: 0
+```
+
+Proves driver↔GPU communication, device enumeration, context creation and
+device-memory alloc/free. Before the 4.22 fix the identical probe returned
+`cuInit: 999 CUDA_ERROR_UNKNOWN` — it is the fastest regression check.
+
+## 6.2 Build the samples
+
+```bash
+sudo dnf install -y cuda-toolkit-13-4 git cmake
+git clone https://github.com/NVIDIA/cuda-samples && cd cuda-samples
+export PATH=/usr/local/cuda/bin:$PATH
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d '.')
+cmake --build build --target deviceQuery vectorAdd -j$(nproc)
+```
+
+The GB300 reports compute capability **10.3** → samples build for `sm_103`.
+Headless VMs skip the GL/GLUT/Vulkan/MPI/NvSCI samples at configure time
+(expected), and the `cdp*` samples skip because they only list `87;110` as
+supported architectures.
+
+## 6.3 Quick tests
+
+```bash
+./build/cpp/1_Utilities/deviceQuery/deviceQuery
+./build/cpp/0_Introduction/vectorAdd/vectorAdd
+```
+
+Actual `deviceQuery` output (abridged):
+
+```text
+CUDA Device Query (Runtime API) version (CUDART static linking)
+Detected 1 CUDA Capable device(s)
+
+Device 0: "NVIDIA GB300"
+  CUDA Driver Version / Runtime Version          13.4 / 13.4
+  CUDA Capability Major/Minor version number:    10.3
+  Total amount of global memory:                 283301 MBytes (...)
+  GPU Max Clock rate:                            ...
+  Compute Mode:
+     < Default (multiple host threads can use ::cudaSetDevice() with device simultaneously) >
+
+deviceQuery, CUDA Driver = CUDART, CUDA Driver Version = 13.4, CUDA Runtime Version = 13.4, NumDevs = 1
+Result = PASS
+```
+
+Actual `vectorAdd` output (abridged):
+
+```text
+[Vector addition of 50000 elements]
+Copy input data from the host memory to the CUDA device
+CUDA kernel launch with 196 blocks of 256 threads
+Copy output data from the CUDA device to the host memory
+Test PASSED
+Test comparison PASSED
+Done
+```
+
+## 6.4 Full sample suite
+
+```bash
+cmake --build build -j$(nproc)     # build everything
+cmake --install build              # populate build/bin/aarch64/linux/release
+python3 run_tests.py --dir ./build/bin/aarch64/linux/release --output res --parallel 2
+```
+
+Actual result (2026-11-01):
+
+```text
+Test Summary:
+Ran 118 test runs for 118 executables.
+Waived runs (2) — hardware/requirements not met (exit 2), not counted as failure:
+  streamOrderedAllocationP2P : Waived (code 2)
+  conjugateGradientMultiDeviceCG : Waived (code 2)
+Failed runs (1):
+  ptxgen : Failed (code 16)
+```
+
+So: **115/118 passed, 2 waived, 1 failed**. Interpretation:
+
+- The two waived samples self-waive on a single-GPU VM (they require
+  P2P/multi-GPU) — by design, not defects.
+- `ptxgen` (exit 16) fails **identically in NVIDIA QE's own working GB300
+  run on this same stack** (internal NVIDIA-1408, Oct 2026) — a libNVVM
+  sample issue, not a passthrough defect.
+- 118 executables run here vs 163 in QE's run because this headless VM skips
+  the GL/GLUT/Vulkan/MPI samples at build time; QE's image built them and
+  they failed at runtime (26 failures there vs 1 here).
+
+Notable coverage among the 115 passing: all tensor-core GEMMs
+(`bf16/fp16/tf32/dmma/immaTensorCoreGemm`), CUDA Graphs
+(`simpleCudaGraphs_*`, `jacobiCudaGraphs`, `graphConditionalNodes`),
+cooperative groups, Thrust/CUB, unified memory (`uvmlite`,
+`UnifiedMemoryStreams`, `UnifiedMemoryPerf`), IPC (`memMapIPCDrv`), JIT/LTO
+(`ptxjit`, `jitLto`), multi-GPU enumeration (`simpleMultiGPU`,
+`MonteCarloMultiGPU`) and the CUDA Tile samples (`tile*`).
+
+## 6.5 Multi-GPU VM (2x GB300 validated)
+
+Exposing more than one GPU is a one-line-per-GPU spec change — each entry in
+`devices.gpus` becomes one passed-through device:
+
+```yaml
+        devices:
+          gpus:
+          - name: gpu0
+            deviceName: nvidia.com/31c2
+          - name: gpu1
+            deviceName: nvidia.com/31c2
+```
+
+AIE scales the generated topology automatically (verified in the live domain
+XML with 2 GPUs): `pcihole64` grows to 4 TiB, each GPU gets its own PCIe
+expander bus + root port + **its own vSMMUv3**, and the guest enumerates two
+PCI devices (`fd:00.0`, `ff:00.0`). Actual guest output:
+
+```text
+$ nvidia-smi -L
+GPU 0: NVIDIA GB300 (UUID: GPU-81e2b4af-...)
+GPU 1: NVIDIA GB300 (UUID: GPU-9a5e4a70-...)
+```
+
+The samples that self-waive on a single-GPU VM then actually run — and pass
+(actual results, 2026-11-01):
+
+```text
+simpleMultiGPU                : "Computing with 2 GPUs..."  — PASSED
+streamOrderedAllocationP2P    : "Device=0 CAN Access Peer Device=1" — PASSED
+conjugateGradientMultiDeviceCG: "Running on GPUs = 2 ... PASSED"
+```
+
+Notably **peer-to-peer access between the two passed-through GPUs works**
+(`cudaDeviceCanAccessPeer` returns true over the emulated PCIe path) — this
+goes beyond the retained QE evidence, whose 2-GPU run output was not saved.
+
+Caveats: the worker's 4 GPUs are split 2+2 across two NUMA nodes and the
+kubelet topology manager runs `restricted`, so with
+`dedicatedCpuPlacement`/`guestMappingPassthrough` the scheduler must co-locate
+GPUs, CPUs and hugepages; a 2-GPU VM fits (one GPU pair per NUMA node). The
+node still shows `nvidia.com/31c2: 4` allocatable, so up to 4 GPUs per VM
+(theoretical) or several single/dual-GPU VMs are possible.
+
+## 6.6 Bandwidth, P2P and soak validation (2-GPU VM)
+
+All numbers measured 2026-11-01 in the 2-GPU VM, driver 615.71.10 / CUDA 13.4.
+
+**ECC (Red Hat documented check):** both GPUs report `ECC Mode: Enabled`
+(current and pending); persistence mode enabled.
+
+**nvbandwidth v0.10** (NVIDIA's current tool — the old `bandwidthTest`/
+`p2pBandwidthLatencyTest` were dropped from cuda-samples and don't compile
+against CUDA 13):
+
+| Test | Per GPU | Notes |
+|---|---|---|
+| H2D memcpy (CE) | **211 GB/s** | far above the emulated PCIe x16 link — traffic uses the coherent C2C path, proving the post-fix coherent path is active |
+| D2H memcpy (CE) | **193 GB/s** | same |
+| H2D/D2H bidirectional | ~171 GB/s | |
+| Local read (SM) | **7.6 TB/s** | near HBM3e spec |
+| Local write (SM) | 6.5 TB/s | |
+| Local copy (memcpy / SM / TMA) | 3.3 / 3.2 / 2.5 TB/s | |
+| **GPU↔GPU (CE)** | **770–776 GB/s** | hardware NVLink between the two passed-through GPUs |
+| GPU↔GPU latency (TMA) | **1.75 µs** | |
+
+Cross-check: a small `cudaMemcpyPeer` loop (runtime path, no copy engine)
+measured ~52 GB/s — a different, host-staged path. Kernel-based peer access
+(`streamOrderedAllocationP2P`) works directly, as shown in 6.5.
+
+**gpu-burn soak** (`wilicc/gpu-burn`, 120 s, both GPUs, ~254 GiB HBM used
+per GPU): both GPUs **OK** (result matrices verified), SM utilization 100%,
+power ~815/843 W (of 1400 W), 47/49 °C, memory clocks 3996 MHz, **zero ECC
+errors, zero power/thermal violations**, clean return to idle.
+
+Build notes: gpu-burn's binary is `gpu_burn` and needs
+`LD_LIBRARY_PATH=/usr/local/cuda/lib64` at runtime; nvbandwidth builds with
+`-DCMAKE_CUDA_ARCHITECTURES=103`. CUDA 13 removed `cudaEnablePeerAccess` —
+peer access is automatic where supported, so `cudaMemcpyPeer` and
+`cudaDeviceCanAccessPeer` are used directly.
 
 ---
 
@@ -798,19 +1132,39 @@ lspci -nnk -s 0a:00.0 | grep "Kernel driver in use"   # nvidia
 | HostedCluster rejected base domain | `172.16.2.132.sslip.io` invalid DNS label | use `172-16-2-132.sslip.io` |
 | VM fails to start: `failed to setup container for group 47: No available IOMMU models` | `vfio_iommu_type1` not loaded (legacy launcher) | DaemonSet in `03-gpu-operator/05-...`, or use iommufd |
 | `Unknown PCI header type 127` on GPU config reads | GPU runtime-suspended while vfio-bound | `power/control=on` (same DaemonSet) |
-| `NVRM: BAR0 is 0M @ 0x0`, BARs "can't assign; no space" | QEMU virt 512 GiB MMIO window < 520 GiB of GB300 BARs; `-global gpex-pcihost.x-above-4g-mmio-size` is a no-op | hook sidecar injecting `-machine highmem-mmio-size=16T` |
-| `kmemsysSetupCoherentCpuLink: Failed to get coherent GPU memory base address` | VM lacks the Grace C2C coherent-memory ACPI description | `NVreg_RegistryDwords="RMForceBarPath=1"` + guest reboot |
+| `NVRM: BAR0 is 0M @ 0x0`, BARs "can't assign; no space" (4.21) | QEMU virt 512 GiB MMIO window < 520 GiB of GB300 BARs | 4.21: hook sidecar `-machine highmem-mmio-size=16T`; **4.22: nothing — AIE sizes pcihole64=2TiB natively** |
+| `kmemsysSetupCoherentCpuLink: Failed to get coherent GPU memory base address` (4.21) | 4.21 VM lacks the Grace C2C coherent-memory ACPI description | 4.21 only: `RMForceBarPath=1`; **4.22: nothing — coherent path works** |
+| **4.22:** `kbusVerifyBar2_GH100: MMUTest BAR0 window offset 0x70e000 returned garbage 0x0`, `RmInitAdapter failed (0x24:0x72:1298)`, nvidia-smi "No devices were found", `cuInit: 999` | **the two 4.21 workarounds carried over**: (a) MMIO hook sidecar overriding AIE's native pcihole64, (b) `RMForceBarPath=1` forcing the BAR path | remove the hookSidecars annotation from the VM **and** delete `/etc/modprobe.d/nvidia-forcebarpath.conf`, then reboot the guest |
 | `nvidia-smi: command not found` after driver install | binary is in `nvidia-driver-cuda`, not `nvidia-driver` | install `nvidia-driver-cuda-<same version>` |
+| DKMS module not built for running kernel | dnf pulled a newer `kernel-core` than the devel package | pin `kernel-64k-devel`/`kernel-devel-matched` to `$(uname -r)` |
 | `modprobe -r nvidia` hangs | unload hangs after failed probe | reboot the guest |
 | `virtctl ssh` times out; `guest-exec` disabled | masquerade networking + libvirt agent allowlist | NodePort SSH service (`04-vm/03-...`) |
+| CDI upload: `open /scratch/tmpimage: permission denied` | local-hostPath dirs are root-owned with `var_t` label | on the node: `chown 107:107 <dir>` **and** `chcon -t container_file_t <dir>` |
+| upload DataVolume stuck Pending: `no volume plugin matched name: kubernetes.io/no-provisioner` | CDI requests ~13% above nominal PVC size (filesystem overhead) | size the PV above `requested storage` in the PVC spec |
+| SSH to NodePort: `REMOTE HOST IDENTIFICATION HAS CHANGED` | NodePort previously served a different VM (new host key) | use a dedicated `UserKnownHostsFile` per VM |
+| `virtctl image-upload` fails: `no such file or directory` | `~` not expanded in `--image-path` | pass an absolute path |
 | GPU operator reports `failed to retrieve GPU node OS info` (non-passthrough use) | NFD not running on guest cluster | label node manually: `feature.node.kubernetes.io/system-os_release.ID=rhel`, `.VERSION_ID=9.8` |
+| `run_tests.py`: `No executables found!` | binaries only land in `build/bin/<arch>/<os>/<type>` after `cmake --install`; or only 2 targets built | `cmake --build build -j$(nproc) && cmake --install build`, or use `--dir ./build/cpp` |
 
 # References
 
 * OpenShift Virtualization docs — PCI passthrough
   (`PermittedHostDevices`, hostDevices/gpus in VMI spec)
 * NVIDIA GPU Operator — KubeVirt / vm-passthrough sandbox mode
+  (docs.nvidia.com/datacenter/cloud-native/gpu-operator — "GPU Operator with
+  OpenShift Virtualization")
+* Red Hat Enterprise Linux for NVIDIA 26.03 — guest configuration
+  (docs.redhat.com: "Configure a guest operating system for GPU workloads",
+  "Install NVIDIA kernel and user mode drivers on a guest")
+* HyperShift docs — Agent platform, multi-arch release images
+  (hypershift.pages.dev)
 * QEMU `virt` machine, `highmem-mmio-size` machine property (hw/arm/virt.c)
 * NVIDIA open-gpu-kernel-modules — `RMForceBarPath`
   (src/nvidia/interface/nvrm_registry.h), `kmemsysSetupCoherentCpuLink`
   (src/nvidia/src/kernel/gpu/mem_sys/kern_mem_sys.c)
+* NVIDIA nvbandwidth (github.com/NVIDIA/nvbandwidth),
+  gpu-burn (github.com/wilicc/gpu-burn),
+  CUDA samples (github.com/NVIDIA/cuda-samples)
+* Internal QE reference for GB300 passthrough on this stack:
+  NVIDIA-1401 / NVIDIA-1408 (CNV 4.22.12, OCP4NV 26.03 kernel 259.26,
+  guest driver 615.62, Oct 2026) — working but not certified

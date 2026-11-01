@@ -1,15 +1,17 @@
-# The working GPU VM definition (this exact spec produced a VM whose GB300 runs
-# nvidia-smi successfully).
+# The working GPU VM definition for CNV 4.22 + AIE (validated 2026-11-01:
+# nvidia-smi, CUDA driver API, cuda-samples suite, 2-GPU P2P).
 #
 # Key points:
 #   - gpus.deviceName nvidia.com/31c2      -> VFIO passthrough of the GB300
-#   - devices.kubevirt.io/iommufd: "1"     -> use the kernel iommufd VFIO container
-#     (needs virt-launcher with libvirt >= 12.2; replaces the legacy type1 fix)
-#   - hookSidecars annotation              -> MMIO window fix, see 04-vm/gpu-mmio-hook.sh
-#     and the ConfigMap 02-gpu-vm-mmio-hook-cm.yaml
+#     (AIE webhook swaps the launcher to virt-launcher-4-nv-rhel10)
+#   - devices.kubevirt.io/iommufd: "1"     -> kernel iommufd VFIO container
+#   - cpu.numa.guestMappingPassthrough + dedicatedCpuPlacement + 2Mi hugepages
+#     -> required for AIE to generate the vSMMUv3 (accel/ATS/PASID), the GPU
+#     ACPI NUMA nodes and hugepage-backed memfd memory
+#   - NO hook sidecar annotation: on 4.22 AIE sizes the PCI window
+#     (pcihole64) itself; the old 16T MMIO hook from 4.21 BREAKS GPU init
+#     (see README 4.3 / 5.2 - the two legacy workarounds are harmful on 4.22)
 #   - nodeSelector pins to the node that hosts the GPUs
-#   - dedicatedCpuPlacement + QoS Guaranteed (requests == limits) — the VM pins
-#     host CPUs, which avoids cross-NUMA PCIe latency; not strictly required.
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
@@ -19,20 +21,21 @@ spec:
   runStrategy: Always
   template:
     metadata:
-      annotations:
-        hooks.kubevirt.io/hookSidecars: '[{"args":["--version","v1alpha2"],"configMap":{"name":"gpu-mmio-hook","key":"onDefineDomain.sh","hookPath":"/usr/bin/onDefineDomain"}}]'
       labels:
         kubevirt.io/domain: gpu-vm
         kubevirt.io/vm: gpu-vm
     spec:
+      architecture: arm64
       nodeSelector:
-        kubernetes.io/hostname: gpu-worker-1
+        kubernetes.io/hostname: compute-tray-11
       domain:
         machine:
           type: virt
         cpu:
           cores: 2
           dedicatedCpuPlacement: true
+          numa:
+            guestMappingPassthrough: {}
         resources:
           requests:
             memory: 16Gi
@@ -40,6 +43,8 @@ spec:
             devices.kubevirt.io/iommufd: "1"
         memory:
           guest: 16Gi
+          hugepages:
+            pageSize: 2Mi
         devices:
           disks:
           - name: rootdisk

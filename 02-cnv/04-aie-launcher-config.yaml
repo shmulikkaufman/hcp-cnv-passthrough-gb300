@@ -1,0 +1,27 @@
+# AIE launcher image selection (see README Phase 2.1).
+#
+# Extract the NV launcher image from the installed CNV CSV first:
+#   CSV=$(oc get csv -n openshift-cnv -o name | grep kubevirt-hyperconverged-operator | sed 's|.*/||')
+#   LAUNCHER_NV_IMAGE=$(oc get csv $CSV -n openshift-cnv -o json \
+#     | jq -r '.spec.relatedImages[] | select(.name | test("virt-launcher-4-nv")) | .image')
+#
+# then substitute it below. Rules are evaluated in order; first match wins.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubevirt-aie-launcher-config
+  namespace: openshift-cnv
+data:
+  config.yaml: |
+    rules:
+    - name: "nvidia-gpu-launcher"
+      image: "${LAUNCHER_NV_IMAGE}"
+      selector:
+        deviceNames:
+        - "nvidia.com/31c2"
+    - name: "labeled-vms"
+      image: "${LAUNCHER_NV_IMAGE}"
+      selector:
+        vmLabels:
+          matchLabels:
+            aie.kubevirt.io/launcher: "true"

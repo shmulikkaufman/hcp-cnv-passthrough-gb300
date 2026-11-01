@@ -3,3 +3,4 @@ pull-secret.json
 *kubeconfig*
 *.qcow2
 *.iso
+.claude/
