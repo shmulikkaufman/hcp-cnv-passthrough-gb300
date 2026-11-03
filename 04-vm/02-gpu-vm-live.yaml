@@ -6,6 +6,14 @@
 # NUMA/hugepages block that makes AIE generate the vSMMUv3.
 # (metadata timestamps/uids and the last-applied-configuration annotation
 # are stripped for readability.)
+#
+# RENAMED 2026-11-02: the VM is now `gpu-vm-tray-11` (labels, cloud-init
+# hostname and SSH service `gpu-vm-tray-11-ssh` updated; NodePort stays
+# 30023). KubeVirt has no in-place rename, so it was recreated referencing
+# the SAME root DataVolume `gpu-vm-rhel-validation-root` (kept unchanged —
+# it is just the disk name). Old VM object deleted with --cascade=orphan.
+# This snapshot records the pre-rename state; see the rename backup in
+# maintenance/20261102T115255Z/vm-rename on the bastion.
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:

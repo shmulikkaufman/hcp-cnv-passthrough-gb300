@@ -1,0 +1,62 @@
+# The cloud-init Secret must exist and the root upload must finish before boot.
+# The two-GPU, dedicated CPU/NUMA/iommufd shape matches the validated source VM.
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: gpu-vm-tray-12
+  namespace: gpu-vm-test
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: gpu-vm-tray-12
+        kubevirt.io/vm: gpu-vm-tray-12
+    spec:
+      architecture: arm64
+      nodeSelector:
+        kubernetes.io/hostname: compute-tray-12
+      domain:
+        machine:
+          type: virt
+        cpu:
+          cores: 2
+          dedicatedCpuPlacement: true
+          numa:
+            guestMappingPassthrough: {}
+        resources:
+          requests:
+            memory: 16Gi
+          limits:
+            devices.kubevirt.io/iommufd: "1"
+        memory:
+          guest: 16Gi
+          hugepages:
+            pageSize: 2Mi
+        devices:
+          disks:
+          - name: rootdisk
+            disk:
+              bus: virtio
+          - name: cloudinit
+            disk:
+              bus: virtio
+          interfaces:
+          - name: default
+            masquerade: {}
+          gpus:
+          - name: gpu0
+            deviceName: nvidia.com/31c2
+          - name: gpu1
+            deviceName: nvidia.com/31c2
+      networks:
+      - name: default
+        pod: {}
+      volumes:
+      - name: rootdisk
+        dataVolume:
+          name: gpu-vm-tray-12-root
+      - name: cloudinit
+        cloudInitNoCloud:
+          secretRef:
+            name: gpu-vm-tray-12-cloudinit

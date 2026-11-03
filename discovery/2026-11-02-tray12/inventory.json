@@ -1,0 +1,121 @@
+{
+  "collected_at_utc": "2026-11-02T08:27:30.507927+00:00",
+  "mode": "inventory",
+  "read_only": true,
+  "results": {
+    "compute-tray-11_dns": [
+      "compute-tray-11",
+      [],
+      [
+        "172.16.2.113"
+      ]
+    ],
+    "compute-tray-12_dns": [
+      "compute-tray-12",
+      [],
+      [
+        "172.16.2.114"
+      ]
+    ],
+    "compute-tray-12-bmc_dns": [
+      "compute-tray-12-bmc",
+      [],
+      [
+        "172.16.2.72"
+      ]
+    ],
+    "tray12_reservations": [
+      {
+        "file": "/etc/dnsmasq.d/reservations.conf",
+        "line": "dhcp-host=18:3d:2d:9b:b4:a6,rh-gb300nvl72-v2-gpu024-bmc,172.16.0.72,24h"
+      },
+      {
+        "file": "/etc/dnsmasq.d/98-gb300-day2-handoff.conf",
+        "line": "dhcp-host=c4:ef:bb:1b:09:19,set:gb300-day2-node,compute-tray-12,172.16.2.114,infinite"
+      },
+      {
+        "file": "/etc/dnsmasq.d/98-gb300-day2-handoff.conf",
+        "line": "dhcp-host=18:3d:2d:9b:b4:a6,set:gb300-day2-management,compute-tray-12-bmc,172.16.2.72,infinite"
+      },
+      {
+        "file": "/etc/dnsmasq.d/98-gb300-day2-handoff.conf",
+        "line": "dhcp-host=e0:9d:73:86:f9:a9,set:gb300-day2-management,compute-tray-12-dpu-bmc,172.16.2.52,infinite"
+      },
+      {
+        "file": "/etc/dnsmasq.d/gb300-ubuntu-pxe-c4-ef-bb-1b-09-19.conf",
+        "line": "dhcp-mac=set:lp-node-c4-ef-bb-1b-09-19,c4:ef:bb:1b:09:19"
+      },
+      {
+        "file": "/etc/dnsmasq.d/gb300-ubuntu-pxe-c4-ef-bb-1b-09-19.conf",
+        "line": "dhcp-mac=set:gb300-netboot-admitted,c4:ef:bb:1b:09:19"
+      },
+      {
+        "file": "/var/lib/misc/dnsmasq.leases",
+        "line": "0 18:3d:2d:9b:b4:a6 172.16.2.72 compute-tray-12-bmc 01:18:3d:2d:9b:b4:a6"
+      },
+      {
+        "file": "/var/lib/misc/dnsmasq.leases",
+        "line": "0 e0:9d:73:86:f9:a9 172.16.2.52 compute-tray-12-dpu-bmc 01:e0:9d:73:86:f9:a9"
+      },
+      {
+        "file": "/var/lib/misc/dnsmasq.leases",
+        "line": "0 c4:ef:bb:1b:09:19 172.16.2.114 compute-tray-12 01:c4:ef:bb:1b:09:19"
+      }
+    ],
+    "bastion_routes": {
+      "rc": 0,
+      "stdout": "[{\"dst\":\"172.16.2.72\",\"gateway\":\"172.16.0.2\",\"dev\":\"eth1\",\"prefsrc\":\"172.16.0.1\",\"flags\":[],\"uid\":1001,\"cache\":[]}]\n",
+      "stderr": ""
+    },
+    "bastion_listeners": {
+      "rc": 0,
+      "stdout": "State  Recv-Q Send-Q      Local Address:Port  Peer Address:PortProcess\nLISTEN 0      4096            127.0.0.1:8082       0.0.0.0:*          \nLISTEN 0      4096              0.0.0.0:20048      0.0.0.0:*          \nLISTEN 0      4096       100.116.28.100:53         0.0.0.0:*          \nLISTEN 0      64                0.0.0.0:2049       0.0.0.0:*          \nLISTEN 0      32             172.17.0.1:53         0.0.0.0:*          \nLISTEN 0      511             127.0.0.1:6379       0.0.0.0:*          \nLISTEN 0      100             127.0.0.1:6080       0.0.0.0:*          \nLISTEN 0      5               127.0.0.1:5901       0.0.0.0:*          \nLISTEN 0      32             172.16.0.1:53         0.0.0.0:*          \nLISTEN 0      3000              0.0.0.0:8443       0.0.0.0:*          \nLISTEN 0      4096              0.0.0.0:57495      0.0.0.0:*          \nLISTEN 0      5               127.0.0.1:4822       0.0.0.0:*          \nLISTEN 0      511               0.0.0.0:81         0.0.0.0:*          \nLISTEN 0      511               0.0.0.0:80         0.0.0.0:*          \nLISTEN 0      4096              0.0.0.0:111        0.0.0.0:*          \nLISTEN 0      128               0.0.0.0:22         0.0.0.0:*          \nLISTEN 0      511               0.0.0.0:443        0.0.0.0:*          \nLISTEN 0      4096            127.0.0.1:4180       0.0.0.0:*          \nLISTEN 0      3000              0.0.0.0:9080       0.0.0.0:*          \nLISTEN 0      5               127.0.0.1:61209      0.0.0.0:*          \nLISTEN 0      151             127.0.0.1:3306       0.0.0.0:*          \nLISTEN 0      511               0.0.0.0:8080       0.0.0.0:*          \nLISTEN 0      3000              0.0.0.0:22623      0.0.0.0:*          \nLISTEN 0      3000              0.0.0.0:6443       0.0.0.0:*          \nLISTEN 0      4096            127.0.0.1:2222       0.0.0.0:*          \nLISTEN 0      511               0.0.0.0:12999      0.0.0.0:*          \nLISTEN 0      32              127.0.0.1:53         0.0.0.0:*          \nLISTEN 0      70              127.0.0.1:33060      0.0.0.0:*          \nLISTEN 0      64                0.0.0.0:45927      0.0.0.0:*          \nLISTEN 0      511                 [::1]:6379          [::]:*          \nLISTEN 0      1      [::ffff:127.0.0.1]:8005             *:*          \nLISTEN 0      100    [::ffff:127.0.0.1]:8000             *:*          \nLISTEN 0      4096                 [::]:20048         [::]:*          \nLISTEN 0      64                   [::]:2049          [::]:*          \nLISTEN 0      64                   [::]:43537         [::]:*          \nLISTEN 0      4096                 [::]:111           [::]:*          \nLISTEN 0      128                  [::]:22            [::]:*          \nLISTEN 0      5                   [::1]:5901          [::]:*          \nLISTEN 0      511                  [::]:8080          [::]:*          \nLISTEN 0      4096                 [::]:47787         [::]:*          \n",
+      "stderr": ""
+    },
+    "workspace_filenames": [
+      "1.txt",
+      "README.md",
+      "chai-bot-valudation-test.sh",
+      "check_hub_readiness.sh",
+      "discovery-arm64-v2.iso",
+      "discovery-arm64-v3.iso",
+      "guest-console-url.txt",
+      "guest-kubeconfig",
+      "hcp",
+      "hcp.tar.gz",
+      "hcp_cnv",
+      "hosted_cluster_cp.yaml",
+      "hub-kubeconfig",
+      "ignition-after-change.log",
+      "iso_hub",
+      "kubeadmin.txt",
+      "kubeconfig_hub",
+      "my-hosted-cluster-nodepool.before.yaml",
+      "my-hosted-cluster.yaml",
+      "pull-secret.json",
+      "setenv.sh"
+    ],
+    "tray12_core_ssh": {
+      "rc": 255,
+      "stdout": "",
+      "stderr": "core@compute-tray-12: Permission denied (publickey,password).\n"
+    },
+    "tray12_nvidia_ssh": {
+      "rc": 255,
+      "stdout": "",
+      "stderr": "nvidia@compute-tray-12: Permission denied (publickey,password).\n"
+    },
+    "bmc/redfish/v1/": {
+      "status": 503,
+      "reason": "Service Unavailable"
+    },
+    "bmc/redfish/v1/Systems": {
+      "status": 503,
+      "reason": "Service Unavailable"
+    },
+    "bmc/redfish/v1/Managers": {
+      "status": 503,
+      "reason": "Service Unavailable"
+    }
+  }
+}

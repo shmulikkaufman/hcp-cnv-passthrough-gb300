@@ -1,0 +1,152 @@
+# Standalone BF-3 VF supply — Phase 1 of the operator-free RDMA path.
+#
+# IMPORTANT (learned the hard way): the container's own /sys mount can show a
+# stale/dangling PCI view on this platform, so this pod does NOT rely on it.
+# It mounts the HOST's /sys via hostPath at /host-sys (same sysfs superblock
+# as the host) and the host's /lib/modules for module loading. All sysfs
+# writes go through /host-sys. This is the standard device-plugin pattern.
+#
+# What it does, idempotently, every 15s on each worker:
+#   1. loads vfio-pci (insmod from host /lib/modules if not present)
+#   2. creates exactly 1 VF on the BlueField-3 PF 0016:01:00.0 via runtime
+#      sysfs (no firmware/NVRAM write, no reboot — unlike the SR-IOV operator
+#      policy path; see README incident record)
+#   3. unbinds the VF from mlx5_core and binds it to vfio-pci for KubeVirt
+#      hostDevices passthrough
+# VFs are re-created automatically after any future node reboot.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sriov-standalone
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vf-supply
+  namespace: sriov-standalone
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sriov-standalone-privileged
+rules:
+- apiGroups:
+  - security.openshift.io
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - use
+  resourceNames:
+  - privileged
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sriov-standalone-privileged
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sriov-standalone-privileged
+subjects:
+- kind: ServiceAccount
+  name: vf-supply
+  namespace: sriov-standalone
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: bf3-vf-supply
+  namespace: sriov-standalone
+  labels:
+    app: bf3-vf-supply
+spec:
+  selector:
+    matchLabels:
+      app: bf3-vf-supply
+  template:
+    metadata:
+      labels:
+        app: bf3-vf-supply
+    spec:
+      serviceAccountName: vf-supply
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: vf-supply
+        image: registry.redhat.io/rhel9/support-tools:latest
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          set -u
+          SYSD=/host-sys
+          PF=0016:01:00.0
+          if [ ! -e "$SYSD/module/vfio_pci" ]; then
+            KREL=$(uname -r)
+            insmod "/host-modules/${KREL}/kernel/drivers/vfio/pci/vfio-pci.ko.xz" 2>/dev/null || true
+          fi
+          while [ ! -e "$SYSD/bus/pci/devices/$PF/sriov_numvfs" ]; do sleep 5; done
+          # PF netdev name (for VF attribute settings)
+          PFNET=""
+          for n in "$SYSD"/bus/pci/devices/$PF/net/*; do
+            [ -d "$n" ] && PFNET=$(basename "$n") && break
+          done
+          while true; do
+            cur=$(cat "$SYSD/bus/pci/devices/$PF/sriov_numvfs" 2>/dev/null || echo 0)
+            if [ "$cur" -lt 1 ]; then
+              echo 1 > "$SYSD/bus/pci/devices/$PF/sriov_numvfs" 2>/dev/null || true
+            fi
+            VF=""
+            for d in "$SYSD"/bus/pci/devices/0016:01:00.*; do
+              b=$(basename "$d")
+              [ "$b" = "$PF" ] && continue
+              VF="$b"
+              break
+            done
+            if [ -n "$VF" ]; then
+              drv=""
+              [ -L "$SYSD/bus/pci/devices/$VF/driver" ] && drv=$(basename "$(readlink "$SYSD/bus/pci/devices/$VF/driver")")
+              if [ "$drv" != "vfio-pci" ]; then
+                echo vfio-pci > "$SYSD/bus/pci/devices/$VF/driver_override" 2>/dev/null || true
+                [ -n "$drv" ] && echo "$VF" > "$SYSD/bus/pci/devices/$VF/driver/unbind" 2>/dev/null || true
+                echo "$VF" > "$SYSD/bus/pci/drivers/vfio-pci/bind" 2>/dev/null || true
+              fi
+              # VF attributes required for guest RDMA (LaunchPad GB300 RoCE
+              # guide, validated with NVIDIA): trust on (guest can set QP
+              # parameters), spoof_chk off (RDMA frames carrying non-Ethernet
+              # source MACs would otherwise be dropped by the VF's filter).
+              # NOTE: separate invocations — combining both options in one
+              # command applies only the last one on this iproute2.
+              # Requires hostNetwork for host-netns ip netlink operations.
+              if [ -n "$PFNET" ]; then
+                ip link set "$PFNET" vf 0 trust on 2>/dev/null || true
+                ip link set "$PFNET" vf 0 spoof_chk off 2>/dev/null || true
+              fi
+            fi
+            sleep 15
+          done
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - name: host-sys
+          mountPath: /host-sys
+        - name: host-modules
+          mountPath: /host-modules
+          readOnly: true
+      volumes:
+      - name: host-sys
+        hostPath:
+          path: /sys
+          type: Directory
+      - name: host-modules
+        hostPath:
+          path: /lib/modules
+          type: Directory
+        resources:
+          requests:
+            cpu: 10m
+            memory: 50Mi

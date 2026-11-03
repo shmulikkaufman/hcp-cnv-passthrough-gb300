@@ -1,0 +1,18 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: sriov-network-operator-subscription
+  namespace: openshift-sriov-network-operator
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: sriov-network-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  startingCSV: sriov-network-operator.v4.22.0-202610241138
+  # Hosted control plane: no master nodes exist in the guest cluster, so the
+  # operator must run on workers. This is the documented HCP procedure:
+  # "Deploy the SR-IOV Operator for hosted control planes" (4.22 docs).
+  config:
+    nodeSelector:
+      node-role.kubernetes.io/worker: ""

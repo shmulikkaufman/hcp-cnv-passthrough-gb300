@@ -1,0 +1,56 @@
+# Independent node-local storage; never reuse tray-11's root PVC/PV.
+# Create the backing directories on tray-12 first (owner 107:107,
+# SELinux container_file_t). Capacity includes CDI filesystem/scratch overhead.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gpu-vm-tray-12-root-pv
+spec:
+  capacity:
+    storage: 140Gi
+  accessModes:
+  - ReadWriteOnce
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-hostpath
+  claimRef:
+    namespace: gpu-vm-test
+    name: gpu-vm-tray-12-root
+  hostPath:
+    path: /var/local/kubevirt/gpu-vm-tray-12-root
+    type: Directory
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - compute-tray-12
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gpu-vm-tray-12-scratch-pv
+spec:
+  capacity:
+    storage: 140Gi
+  accessModes:
+  - ReadWriteOnce
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-hostpath
+  claimRef:
+    namespace: gpu-vm-test
+    name: gpu-vm-tray-12-root-scratch
+  hostPath:
+    path: /var/local/kubevirt/gpu-vm-tray-12-scratch
+    type: Directory
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - compute-tray-12

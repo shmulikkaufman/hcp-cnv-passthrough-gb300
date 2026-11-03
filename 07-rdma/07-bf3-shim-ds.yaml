@@ -1,0 +1,69 @@
+# bf3-shim DaemonSet — the external device plugin that bridges the two gaps
+# between the SR-IOV stack and KubeVirt hostDevices on this platform:
+#   1. emits PCI_RESOURCE_<NAME> env var (KubeVirt's contract; SR-IOV plugin
+#      emits PCIDEVICE_ which KubeVirt ignores)
+#   2. provides /dev/vfio/devices/vfioN DeviceSpecs (kernel 6.x per-device
+#      cdev — CNV-91802; fixed upstream in KubeVirt v1.9 / CNV 5.0 only)
+# Mirrors NVIDIA's GPU plugin behavior (the reason GPU passthrough works).
+# Requires externalResourceProvider: true on the permittedHostDevices entry.
+# Binary is built from bf3-shim/ (Go, static linux/arm64) and delivered to
+# /var/local/bf3-shim/ on each node.
+# At CNV 5.0+: delete this DaemonSet and set externalResourceProvider: false.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: bf3-shim
+  namespace: sriov-standalone
+  labels:
+    app: bf3-shim
+spec:
+  selector:
+    matchLabels:
+      app: bf3-shim
+  template:
+    metadata:
+      labels:
+        app: bf3-shim
+    spec:
+      serviceAccountName: vf-supply
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: bf3-shim
+        image: registry.redhat.io/rhel9/support-tools:latest
+        command: ["/var/local/bf3-shim/bf3-shim"]
+        args:
+        - -resource=openshift.io/mellanox_bf3roce_vf
+        - -devices=0016:01:00.1
+        - -sysfs=/host-sys
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - name: shim-binary
+          mountPath: /var/local/bf3-shim
+          readOnly: true
+        - name: device-plugins
+          mountPath: /var/lib/kubelet/device-plugins
+        - name: host-sys
+          mountPath: /host-sys
+          readOnly: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 50Mi
+      volumes:
+      - name: shim-binary
+        hostPath:
+          path: /var/local/bf3-shim
+          type: Directory
+      - name: device-plugins
+        hostPath:
+          path: /var/lib/kubelet/device-plugins
+          type: Directory
+      - name: host-sys
+        hostPath:
+          path: /sys
+          type: Directory

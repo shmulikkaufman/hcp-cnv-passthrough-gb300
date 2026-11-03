@@ -75,13 +75,33 @@ Division of labor for GPU passthrough:
   infraenv.yaml                  discovery ISO environment (reference)
 02-cnv/                          OpenShift Virtualization operator + HyperConverged + AIE
 03-gpu-operator/                 GPU operator, vm-passthrough policy, CNV device whitelist
-04-vm/                           The GPU VM: DataVolume, VM, SSH service
+04-vm/                           The GPU VM: DataVolume, VM, SSH service (tray-11/ and tray-12/)
 05-guest-driver/                 In-guest NVIDIA driver install
 06-cuda-test/                    CUDA validation: driver-API probe + cuda-samples build/run
+07-rdma/                         VM-to-VM RDMA: VF supply, device-plugin shim, incident records
+discovery/                       Point-in-time discovery snapshots and session logs
 scripts/                         Environment helpers
 ```
 
 All manifests are also inlined in the phase sections below.
+
+## Menu
+
+1. [Architecture](#architecture) — the three-layer picture (hub → hosted cluster → VM)
+2. [Phase 0 — Prerequisites](#phase-0--prerequisites)
+3. [Phase 1 — HCP: hub + hosted (guest) cluster](#phase-1--hcp-hub--hosted-guest-cluster)
+4. [Phase 2 — Deploy OpenShift Virtualization (CNV)](#phase-2--deploy-openshift-virtualization-cnv)
+5. [Phase 3 — GPU operator in vm-passthrough mode + device whitelist](#phase-3--gpu-operator-in-vm-passthrough-mode--device-whitelist)
+6. [Phase 4 — Create the GPU VM](#phase-4--create-the-gpu-vm)
+7. [Phase 5 — In-guest NVIDIA driver](#phase-5--in-guest-nvidia-driver)
+8. [Phase 6 — CUDA validation inside the VM](#phase-6--cuda-validation-inside-the-vm)
+9. [Phase 7 — VM-to-VM RDMA (BlueField-3 VF passthrough)](#phase-7--vm-to-vm-rdma-bluefield-3-vf-passthrough) — current work
+10. [Troubleshooting log](#troubleshooting-log-everything-that-was-hit)
+11. [References](#references)
+
+Quick paths: GPU passthrough architecture → [Phase 3](#phase-3--gpu-operator-in-vm-passthrough-mode--device-whitelist);
+second VM (tray-12) → `04-vm/tray-12/README.md`; RDMA design, incidents and
+the device-plugin shim → `07-rdma/README.md`.
 
 ---
 
@@ -921,9 +941,10 @@ lspci -nnk -s ff:00.0 | grep "Kernel driver in use"   # nvidia
 # Phase 6 — CUDA validation inside the VM
 
 Tooling lives in `06-cuda-test/` (see its README). All examples below are the
-**actual commands and outputs from the validated 2026-11-01 run** on
-`gpu-vm-rhel-validation` (RHEL 10.2, driver 615.71.10, CUDA 13.4, GB300
-`sm_103`), run over the NodePort SSH from the bastion.
+**actual commands and outputs from the validated 2026-11-01 run** on the
+original VM (renamed `gpu-vm-tray-11` on 2026-11-02; RHEL 10.2, driver
+615.71.10, CUDA 13.4, GB300 `sm_103`), run over the NodePort SSH from the
+bastion.
 
 ## 6.1 Driver-API probe (no toolkit needed)
 
@@ -1121,6 +1142,43 @@ Build notes: gpu-burn's binary is `gpu_burn` and needs
 `-DCMAKE_CUDA_ARCHITECTURES=103`. CUDA 13 removed `cudaEnablePeerAccess` —
 peer access is automatic where supported, so `cudaMemcpyPeer` and
 `cudaDeviceCanAccessPeer` are used directly.
+
+---
+
+# Phase 7 — VM-to-VM RDMA (BlueField-3 VF passthrough)
+
+Full details, manifests and incident records in `07-rdma/README.md`.
+
+**Status (2026-11-03): FULLY VALIDATED.** Each guest has its 2x GB300 plus
+one BlueField-3 ConnectX-7 VF (`15b3:101e`) with RDMA port ACTIVE, and
+VM-to-VM RoCE traffic tests pass:
+
+```
+lspci:    0a:00.0 Mellanox ConnectX Family mlx5Gen Virtual Function [15b3:101e]
+driver:   mlx5_core (guest inbox)     netdev: enp10s0 UP
+rdma:     link mlx5_0/1 state ACTIVE physical_state LINK_UP
+
+ib_write_bw  (1 QP):  350 Gb/s both directions (symmetric)
+ib_write_bw (16 QPs): 370 Gb/s
+ib_write_lat (2 B):   2.38 µs min / 2.44 µs avg
+isolation:            rx_write_requests on mlx5_0/1 == iteration count (RDMA HW counters)
+```
+
+Validated with throwaway RFC-5737 probe IPs; production addressing on the
+BF-3 fabric still needs approved VLAN/subnet input.
+
+The stock SR-IOV operator path cannot be used end-to-end on this platform;
+three gaps are bridged by two small custom components (`05-bf3-vf-supply`
+DaemonSet for VF creation via runtime sysfs, and the `bf3-shim` external
+device plugin for the KubeVirt env-var and kernel-6.x vfio-cdev contracts —
+the latter is upstream bug CNV-91802, fixed only in CNV 5.0). The attach
+mechanism itself is the same proven `hostDevices` + `permittedHostDevices`
+pattern used for the GPUs (and validated on x86 in
+`github.com/shmulikkaufman/nvd-launchpad-perf`).
+
+**Remaining:** GPUDirect RDMA (`--use_cuda_dmabuf`) as a later phase; real
+fabric addressing when approved; optional PFC/ECN for sustained production
+loads.
 
 ---
 

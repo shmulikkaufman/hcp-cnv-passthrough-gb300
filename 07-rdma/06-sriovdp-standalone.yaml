@@ -1,0 +1,112 @@
+# Standalone sriov-network-device-plugin — SUPERSEDED, do not deploy.
+#
+# This was Phase 2 of the operator-free RDMA path. It successfully advertised
+# the VF as openshift.io/mellanox_bf3roce_vf on both workers, but its
+# Allocate() responses emit PCIDEVICE_* env vars, which KubeVirt's
+# virt-launcher does not read (it expects PCI_RESOURCE_*). Replaced by
+# bf3-shim (07-bf3-shim-ds.yaml), which emits the correct env var AND the
+# kernel-6.x vfio cdev DeviceSpecs. Its DaemonSet was deleted 2026-11-03.
+# Kept for reference and as a rollback option (it also required
+# externalResourceProvider: true, and hostNetwork: true).
+#
+# Advertises the manually-supplied BF-3 VF (bound to vfio-pci by
+# bf3-vf-supply) as the extended resource `openshift.io/mellanox_bf3roce_vf`.
+#
+# This is the SAME upstream plugin the SR-IOV Network Operator deploys
+# (same pinned image digest, already present on the nodes), configured
+# directly via ConfigMap instead of through the operator's policy layer
+# (which reboots nodes on this hardware; see README incident record).
+#
+# Notes:
+# - hostPath /sys is mounted over the container's own /sys: the container's
+#   sysfs view can be stale on this platform (dangling PCI symlinks).
+# - Runs under the vf-supply service account, which is granted the
+#   privileged SCC (see 05-bf3-vf-supply.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: device-plugin-config
+  namespace: sriov-standalone
+data:
+  config.json: |
+    {
+      "resourceList": [
+        {
+          "resourceName": "mellanox_bf3roce_vf",
+          "selectors": {
+            "vendors": ["15b3"],
+            "devices": ["101e"],
+            "drivers": ["vfio-pci"],
+            "pciAddresses": ["0016:01:00.1"]
+          }
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: sriov-device-plugin
+  namespace: sriov-standalone
+  labels:
+    app: sriov-device-plugin
+spec:
+  selector:
+    matchLabels:
+      app: sriov-device-plugin
+  template:
+    metadata:
+      labels:
+        app: sriov-device-plugin
+    spec:
+      serviceAccountName: vf-supply
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: sriov-device-plugin
+        image: registry.redhat.io/openshift4/ose-sriov-network-device-plugin-rhel9@sha256:287aa12543bc8385bb93f1b0903a3a2ad7c439ddb576dc74b3e47d9a1237ea5f
+        args:
+        - --log-level=10
+        - --resource-prefix=openshift.io
+        - --config-file=/etc/pcidp/config.json
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: devicesock
+          mountPath: /var/lib/kubelet/device-plugins
+        - name: plugins-registry
+          mountPath: /var/lib/kubelet/plugins_registry
+        - name: config-volume
+          mountPath: /etc/pcidp/
+          readOnly: true
+        - name: device-info
+          mountPath: /var/run/k8s.cni.cncf.io/devinfo/dp
+        - name: host-sys
+          mountPath: /sys
+        resources:
+          requests:
+            cpu: 10m
+            memory: 50Mi
+      volumes:
+      - name: devicesock
+        hostPath:
+          path: /var/lib/kubelet/device-plugins
+      - name: plugins-registry
+        hostPath:
+          path: /var/lib/kubelet/plugins_registry
+      - name: config-volume
+        configMap:
+          name: device-plugin-config
+      - name: device-info
+        hostPath:
+          path: /var/run/k8s.cni.cncf.io/devinfo/dp
+          type: DirectoryOrCreate
+      - name: host-sys
+        hostPath:
+          path: /sys
+          type: Directory

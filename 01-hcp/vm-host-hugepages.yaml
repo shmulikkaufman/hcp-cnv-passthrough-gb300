@@ -1,0 +1,35 @@
+# Apply on the HUB and append this ConfigMap to the existing NodePool.spec.config.
+# Reserve 64 GiB of 2 MiB hugepages on each CPU-bearing NUMA node (128 GiB
+# across the two Grace CPU NUMA nodes). Skip the GPU/memory-only NUMA nodes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vm-host-hugepages
+  namespace: clusters
+data:
+  config: |
+    apiVersion: machineconfiguration.openshift.io/v1
+    kind: MachineConfig
+    metadata:
+      name: 99-vm-host-hugepages
+    spec:
+      config:
+        ignition:
+          version: 3.4.0
+        systemd:
+          units:
+          - name: vm-host-hugepages.service
+            enabled: true
+            contents: |
+              [Unit]
+              Description=Allocate NUMA-local 2Mi hugepages for GPU VMs
+              After=local-fs.target
+              Before=kubelet.service
+
+              [Service]
+              Type=oneshot
+              RemainAfterExit=yes
+              ExecStart=/bin/bash -ec 'for node in /sys/devices/system/node/node[0-9]*; do cpus=$$(cat "$$node/cpulist"); if [ -n "$$cpus" ]; then file="$$node/hugepages/hugepages-2048kB/nr_hugepages"; echo 32768 > "$$file"; actual=$$(cat "$$file"); echo "$$node: $$actual hugepages of 2Mi"; test "$$actual" -ge 32768; fi; done'
+
+              [Install]
+              WantedBy=multi-user.target

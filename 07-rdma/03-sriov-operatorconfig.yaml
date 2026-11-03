@@ -1,0 +1,20 @@
+# Default SriovOperatorConfig, required for the operator to become functional.
+# On standard OpenShift clusters the CVO creates this object; when installing
+# via OLM subscription on a hosted control plane cluster it must be created
+# manually (the operator logs "default SriovOperatorConfig object not found"
+# and stays idle without it).
+apiVersion: sriovnetwork.openshift.io/v1
+kind: SriovOperatorConfig
+metadata:
+  name: default
+  namespace: openshift-sriov-network-operator
+spec:
+  # Config daemon runs on the workers (the only nodes in the guest cluster).
+  configDaemonNodeSelector:
+    node-role.kubernetes.io/worker: ""
+  # Do NOT cordon/drain nodes when applying SR-IOV config. Both workers run
+  # non-live-migratable GPU VMs; draining would evict them. VF creation on an
+  # unused PF does not require a drain.
+  disableDrain: true
+  enableInjector: true
+  enableOperatorWebhook: true

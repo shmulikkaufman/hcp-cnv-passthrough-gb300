@@ -1,0 +1,26 @@
+# !! See README incident record (2026-11-02): the original netdevice+isRdma
+# !! version of this policy caused a simultaneous reboot loop on both workers
+# !! and was deleted. Hardware VF creation itself is proven fine via manual
+# !! sysfs test (VF 0016:01:00.1, link up, RDMA port active, node stayed Ready).
+#
+# Retry variant, staged rollout:
+# - deviceType vfio-pci, NO isRdma: avoids the daemon path that triggered the
+#   reboot loop. Guest binds its own mlx5 driver for in-guest RDMA, so host-side
+#   isRdma is not needed for VM-to-VM RDMA.
+# - nodeSelector scoped to a single tray first (compute-tray-11) so a repeat
+#   can never affect both workers at once. Extend to tray-12 only after tray-11
+#   converges cleanly.
+apiVersion: sriovnetwork.openshift.io/v1
+kind: SriovNetworkNodePolicy
+metadata:
+  name: bf3-roce-vf
+  namespace: openshift-sriov-network-operator
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: compute-tray-11
+  resourceName: mellanox-bf3roce
+  numVfs: 1
+  nicSelector:
+    rootDevices:
+    - 0016:01:00.0
+  deviceType: vfio-pci

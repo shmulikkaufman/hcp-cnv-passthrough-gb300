@@ -1,0 +1,27 @@
+# Apply on the HUB and append this ConfigMap to the existing NodePool.spec.config.
+# This affects every worker in that NodePool; schedule VM maintenance first.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vm-host-kubelet-config
+  namespace: clusters
+data:
+  config: |
+    apiVersion: machineconfiguration.openshift.io/v1
+    kind: KubeletConfig
+    metadata:
+      name: vm-host-kubelet-config
+    spec:
+      kubeletConfig:
+        cpuManagerPolicy: static
+        cpuManagerReconcilePeriod: 5s
+        topologyManagerPolicy: restricted
+        topologyManagerScope: container
+        topologyManagerPolicyOptions:
+          max-allowable-numa-nodes: "34"
+        kubeReserved:
+          cpu: 500m
+        systemReserved:
+          cpu: 500m
+          memory: 1Gi
+          ephemeral-storage: 1Gi
