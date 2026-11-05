@@ -128,7 +128,9 @@ automated sequence with rollback is preserved on the bastion as
   GPU" topology on the GPU-local socket would use the unused port-1 PFs.
 - Host PF MTU 9000 and all guest test networking are runtime-only, not
   reboot-persistent; production IPAM/VLAN design is still pending.
-- GPUDirect RDMA remains unqualified; all results are system-memory RDMA.
+- GPUDirect RDMA is validated separately (dma-buf path, see
+  [GPUDirect validation](gpudirect-validation-2026-11-05.md)); the results
+  in this report are system-memory RDMA.
 - Rollback: stop the VM, restore the two-rail `hostDevices` from
   `10-cx8-two-rails-vm.patch.yaml`, restore the shim's two-device list
   from `11-cx8-two-rails-plugin.patch.json`, and optionally restore

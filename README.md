@@ -1195,6 +1195,21 @@ for the lab-workaround scope and rollback. Bonding/LAG, GPU-local two-links
 test networking are runtime-only, not reboot-persistent. The BF-3 results
 below are historical, not the current pair.
 
+**GPUDirect RDMA (2026-11-05): VALIDATED.** GPU-memory↔GPU-memory RDMA
+between the VMs works via the **dma-buf path** (`ibv_reg_dmabuf_mr` +
+`cuMemGetHandleForAddressRange`) on the inbox mlx5 stack — no MOFED, no
+`nvidia-peermem` (its `ib_register_peer_memory_client` API is MOFED-only
+and absent from the guest kernels; root-caused and documented). perftest
+with `--use_cuda_dmabuf` sustains **390.25 Gb/s** GPU↔GPU on one rail
+(779.59 Gb/s on two rails concurrently), and a custom pyverbs+ctypes test
+proves **byte-exact content**: 3 rounds × 32 MiB of positional patterns
+written VM12→VM3 GPU memory, verified on-GPU readback, rail counter delta
+exactly 96. Host-memory `--data_validation` also passes; GPU-mode
+`--data_validation` fails on FETCH_AND_ADD atomics over dmabuf (documented
+inbox-stack limitation). Build steps, API gotchas and full evidence in
+[GPUDirect validation](07-rdma/gpudirect-validation-2026-11-05.md) and
+`07-rdma/gpudirect-verify.py`.
+
 **VM3 guest NVIDIA driver/CUDA (2026-11-05): validated.** Driver 615.71.10
 + CUDA 13.4 installed via the Phase 5 procedure with VM3's own RHSM
 identity; `nvidia-smi` shows 2x GB300 and the driver-API probe passes
@@ -1228,9 +1243,9 @@ mechanism itself is the same proven `hostDevices` + `permittedHostDevices`
 pattern used for the GPUs (and validated on x86 in
 `github.com/shmulikkaufman/nvd-launchpad-perf`).
 
-**Remaining:** GPUDirect RDMA (`--use_cuda_dmabuf`) as a later phase; real
-fabric addressing when approved; optional PFC/ECN for sustained production
-loads.
+**Remaining:** real fabric addressing when approved; optional PFC/ECN for
+sustained production loads; optional GPUDirect follow-ups (GPU-buffer
+latency, NUMA-1 rails) — the core GPUDirect path itself is validated.
 
 ---
 

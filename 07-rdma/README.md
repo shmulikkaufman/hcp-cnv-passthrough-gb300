@@ -6,11 +6,16 @@ and all four rails passing RDMA tests at **jumbo MTU** (Ethernet 9000,
 active RDMA MTU 4096, fabric support verified by DF-set pings). Each rail
 sustains **390.28 Gb/s** in isolation; concurrent streams measured
 **993.90 Gb/s one-way combined** and **1,976.09 Gb/s full-duplex
-aggregate**. VM11 is stopped; no BF-3 VF is attached to the active pair.
-**No bond is configured.**
+aggregate**. **GPUDirect RDMA (GPU-memory buffers, dma-buf path, inbox
+mlx5 stack) is validated** on the same profile: 390.25 Gb/s sustained
+GPU↔GPU per rail with byte-exact content verification. VM11 is stopped; no
+BF-3 VF is attached to the active pair. **No bond is configured.**
 
 See [four-rail validation](four-rail-validation-2026-11-05.md) for the
-four-rail mapping, jumbo-MTU procedure, exact results and limits. The
+four-rail mapping, jumbo-MTU procedure, exact results and limits, and
+[GPUDirect validation](gpudirect-validation-2026-11-05.md) for the
+GPU-memory RDMA results, the peermem root-cause analysis and the custom
+content-integrity test. The
 [two-rail validation](two-rail-validation-2026-11-05.md) (MTU 1500/1024)
 and the [one-VF recovery record](recovery-2026-11-05.md) remain as
 fallbacks. The BF-3 deployment/results below are historical.
@@ -47,12 +52,14 @@ VM-to-VM validation checks, in order:
 4. **Performance sanity** — results in the expected range for a 400G VF
    (hundreds of Gb/s, single-digit-µs latency).
 
-Explicitly **out of scope** here: GPUDirect RDMA (NIC DMA into GPU memory —
-a separate later phase) and lossless-fabric tuning (PFC/ECN) for sustained
-production loads.
+Explicitly **out of scope** here: lossless-fabric tuning (PFC/ECN) for
+sustained production loads. GPUDirect RDMA (NIC DMA into GPU memory) was
+originally a later phase and **is now validated** — see
+[GPUDirect validation](gpudirect-validation-2026-11-05.md).
 
-Current scope is **basic system-memory RoCE RDMA** between the two Ready,
-two-GB300 VMs. GPUDirect RDMA is a separate future qualification.
+Current scope is **system-memory RoCE RDMA** (this document) plus
+**GPUDirect RDMA via dma-buf** (that report) between the two Ready,
+two-GB300 VMs.
 
 **Historical BF-3 result (2026-11-03): VM-to-VM RDMA VALIDATED.** Device exposure complete
 on both VMs and traffic tests pass: ~350 Gb/s single-QP, 370 Gb/s at 16 QPs,
@@ -60,7 +67,8 @@ on both VMs and traffic tests pass: ~350 Gb/s single-QP, 370 Gb/s at 16 QPs,
 
 ## Menu
 
-Current profile: [four-rail CX-8 validation](four-rail-validation-2026-11-05.md).
+Current profile: [four-rail CX-8 validation](four-rail-validation-2026-11-05.md)
+and [GPUDirect (dma-buf) validation](gpudirect-validation-2026-11-05.md).
 Fallbacks: [two-rail CX-8 validation](two-rail-validation-2026-11-05.md) and
 [one-VF CX-8 baseline](recovery-2026-11-05.md).
 
@@ -89,7 +97,8 @@ profile adds `12-cx8-four-rails-vm.patch.yaml` and
 `13-cx8-four-rails-plugin.patch.json`. These are patches,
 not apply manifests. See the four-rail report for serial rollout, jumbo-MTU
 procedure, networking and rollback instructions; do not bulk-apply this
-directory.
+directory. `gpudirect-verify.py` is the GPUDirect content-integrity test
+(server/client modes; validated 2026-11-05, see its report).
 
 ## Read-only NIC inventory (2026-11-02)
 
@@ -309,7 +318,8 @@ Device exposure is COMPLETE on both VMs. Remaining work for traffic tests:
    `trust on` / `spoof off` (can be added to the supply DaemonSet).
 3. Bidirectional `ib_write_bw` (system memory) between the guests.
 4. GPUDirect RDMA (`--use_cuda_dmabuf`, no peermem needed with the open
-   driver) as a separate later phase.
+   driver) — **completed 2026-11-05**, see
+   [GPUDirect validation](gpudirect-validation-2026-11-05.md).
 
 ### Traffic validation (2026-11-03, RFC-5737 probe addresses)
 
@@ -372,9 +382,9 @@ addressing on the BF-3 fabric still needs approved VLAN/subnet input; with a
 real VLAN, add `ip link set enP22s22np0 vf 0 vlan <id>` to the supply
 DaemonSet.
 
-Remaining: GPUDirect RDMA (`--use_cuda_dmabuf`) as a later phase; optional
-PFC/ECN lossless config for sustained production loads (not needed for
-validation — no loss observed).
+Remaining: optional PFC/ECN lossless config for sustained production loads
+(not needed for validation — no loss observed). GPUDirect RDMA has since
+been validated — see [GPUDirect validation](gpudirect-validation-2026-11-05.md).
 
 ## Incident record: VF policy triggered node reboot loop (2026-11-02, resolved)
 
