@@ -10,16 +10,22 @@ intersection of the project goal (RDMA on top of CNV): the same passed-through
 GB300 GPUs and CX-8 VFs now carry RDMA writes whose source *and* destination
 buffers are device memory, with byte-exact content verification.
 
-Validated on rail `gpu0p0` (VM3 `mlx5_1` / GID 3, 192.0.2.21 ↔ VM12 .22):
+Validated on rail `gpu0p0` (VM3 `mlx5_1` / GID 3, 192.0.2.21 ↔ VM12 .22),
+re-verified 2026-11-05 with per-test logs persisted:
 
 | Test | Result |
 |---|---|
-| perftest `ib_write_bw --use_cuda=0 --use_cuda_dmabuf`, 1 QP, 64 KiB × 5000 | **386.11 Gb/s** (≈ system-memory speed 388.74) |
+| perftest `ib_write_bw --use_cuda=0 --use_cuda_dmabuf`, 1 QP, 64 KiB × 5000, VM12→VM3 | **386.10 Gb/s** avg (386.34 peak) |
+| Same, reverse direction (VM3→VM12) | **386.21 Gb/s** — symmetric |
 | Sustained, 16 QPs, 30 s | **390.25 Gb/s** |
-| Two GPU-local rails concurrent (gpu0p0+gpu1p0) | **779.59 Gb/s** combined |
-| Rail counter (`rx_write_requests`) delta | **exactly 5000** (path proof) |
+| Two GPU-local rails concurrent (gpu0p0+gpu1p0) | **780.02 Gb/s** combined (389.93 + 390.09) |
+| Rail counter (`rx_write_requests`) delta | **exactly 5000** per single-QP run (path proof) |
 | Mid-run `nvidia-smi` on both VMs | **682 MiB** GPU memory held by `ib_write_bw` |
 | Custom content-integrity test (below) | **PASS**, 3 × 32 MiB byte-exact, rail delta exactly 96 |
+
+For comparison, system-memory RDMA on the same rail measured 388.74 Gb/s
+single-QP / 390.28 Gb/s sustained — GPUDirect GPU-memory transfers run at
+full rail speed, with no host-memory staging.
 
 ## Why peermem cannot work here (negative control, root-caused)
 
@@ -174,9 +180,14 @@ same rail).
 ## Audit evidence
 
 Bastion, `maintenance/20261105T115239Z-four-cx8-rails/`:
-`gpudirect-negative-and-first-test.log` (peermem negative control + first
-dma-buf run), `gpudirect-dmabuf-full-suite.log` (sustained/two-rail/
-validation runs, mid-run `nvidia-smi`), `gpudirect-test.py` (suite driver),
-`gpudirect-verify.py` and `gpudirect-verify-run.log` (custom integrity test,
-final clean run). All host-side state (rail maps, counters) is in the same
-directory per the four-rail report.
+`gpudirect-negative-control.log` (peermem negative control, MR error=14),
+`gpudirect-bw-gpu0p0-single-qp-vm12-to-vm3.log`,
+`gpudirect-bw-gpu0p0-single-qp-vm3-to-vm12.log`,
+`gpudirect-bw-gpu0p0-sustained-16qp-30s.log`,
+`gpudirect-bw-two-rail-concurrent.log` (bandwidth suite, driver
+`gpudirect-bw-rerun.py`), and `gpudirect-verify.py` +
+`gpudirect-verify-run.log` (custom integrity test, final clean run).
+`gpudirect-test.py` is the earlier one-shot suite driver (its
+mid-run `nvidia-smi` evidence — 682 MiB on both VMs — comes from that
+run's console output). All host-side state (rail maps, counters) is in the
+same directory per the four-rail report.
