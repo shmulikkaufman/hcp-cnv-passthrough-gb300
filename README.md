@@ -1174,19 +1174,26 @@ peer access is automatic where supported, so `cudaMemcpyPeer` and
 
 Full details, manifests and incident records in `07-rdma/README.md`.
 
-**Latest active profile (2026-11-05): two CX-8 rails between VM3 and VM12.**
-Both guests boot with two GPU requests and **two selected CX-8 VFs each**;
-VM11 is stopped. Concurrent independent RDMA streams measured **727.14 Gb/s
-one-way combined** and **1,448.48 Gb/s full-duplex aggregate**, with each
-rail independently sustaining 363.77 Gb/s. No bond is configured.
-A per-VM PCI bus-range guard repairs overlapping generated PCI expander
-ranges, and the CX-8 shim uses a separate resource-specific socket from
-the BF-3 shim. Interface-local ARP settings prevent replies across the two
-test interfaces. See [two-rail validation](07-rdma/two-rail-validation-2026-11-05.md)
-for exact mapping, test commands, results and limits, and
-[the one-VF fallback](07-rdma/recovery-2026-11-05.md) for the lab-workaround
-scope and rollback. Four rails, bonding/LAG, jumbo MTU and GPUDirect remain
-unqualified. The BF-3 results below are historical, not the current pair.
+**Latest active profile (2026-11-05): four CX-8 rails + jumbo MTU between
+VM3 and VM12.** Both guests boot with two GPU requests and **four CX-8 VFs
+each** (two NUMA-0, two NUMA-1 rails); VM11 is stopped. Ethernet MTU is
+**9000** end-to-end with **active RDMA MTU 4096**, after the fabric was
+empirically verified to carry 9000-byte frames (DF-set pings on every
+rail). Each rail sustains **390.28 Gb/s** in isolation (97.6% of 400G,
+about +7% over MTU 1024); concurrent streams measured **993.90 Gb/s
+one-way combined** and **1,976.09 Gb/s full-duplex aggregate** (the
+concurrent per-rail figure is guest-CPU-bound at 2 vCPUs). No bond is
+configured. A per-VM PCI bus-range guard repairs overlapping generated PCI
+expander ranges, and the CX-8 shim uses a separate resource-specific socket
+from the BF-3 shim. Interface-local ARP settings prevent replies across
+the test interfaces. See [four-rail validation](07-rdma/four-rail-validation-2026-11-05.md)
+for exact mapping, jumbo-MTU procedure, test commands, results and limits,
+[the two-rail report](07-rdma/two-rail-validation-2026-11-05.md) for the
+ARP-fix history, and [the one-VF fallback](07-rdma/recovery-2026-11-05.md)
+for the lab-workaround scope and rollback. Bonding/LAG, GPU-local two-links
+-per-GPU topologies and GPUDirect remain unqualified. Host PF MTU and guest
+test networking are runtime-only, not reboot-persistent. The BF-3 results
+below are historical, not the current pair.
 
 **VM3 guest NVIDIA driver/CUDA (2026-11-05): validated.** Driver 615.71.10
 + CUDA 13.4 installed via the Phase 5 procedure with VM3's own RHSM

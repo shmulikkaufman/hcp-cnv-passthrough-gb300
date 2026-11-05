@@ -1,0 +1,21 @@
+[
+  {
+    "op": "test",
+    "path": "/spec/template/spec/containers/0/name",
+    "value": "cx8-shim"
+  },
+  {
+    "op": "test",
+    "path": "/spec/template/spec/containers/0/command",
+    "value": ["/var/local/cx8-shim/device-plugin"]
+  },
+  {
+    "op": "replace",
+    "path": "/spec/template/spec/containers/0/args",
+    "value": [
+      "-resource=openshift.io/cx8_roce_vf",
+      "-devices=0000:03:00.2,0002:03:00.2,0010:03:00.2,0012:03:00.2",
+      "-sysfs=/host-sys"
+    ]
+  }
+]

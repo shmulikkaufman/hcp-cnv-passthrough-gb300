@@ -1,16 +1,19 @@
 # VM-to-VM RoCE RDMA on GB300
 
 **Current tested profile (2026-11-05):** `gpu-vm-tray-3` and
-`gpu-vm-tray-12` each have **2 GPU requests + 2 CX-8 VFs**, with guest SSH and
-both rails passing RDMA tests. Concurrent streams measured **727.14 Gb/s
-one-way combined** and **1,448.48 Gb/s full-duplex aggregate**. VM11 is
-stopped; no BF-3 VF is attached to the active pair. **No bond is configured.**
+`gpu-vm-tray-12` each have **2 GPU requests + 4 CX-8 VFs**, with guest SSH
+and all four rails passing RDMA tests at **jumbo MTU** (Ethernet 9000,
+active RDMA MTU 4096, fabric support verified by DF-set pings). Each rail
+sustains **390.28 Gb/s** in isolation; concurrent streams measured
+**993.90 Gb/s one-way combined** and **1,976.09 Gb/s full-duplex
+aggregate**. VM11 is stopped; no BF-3 VF is attached to the active pair.
+**No bond is configured.**
 
-See [two-rail validation](two-rail-validation-2026-11-05.md) for the physical
-VF-to-guest mapping, interface-local ARP fix, exact test procedure and results.
-The [one-VF recovery record](recovery-2026-11-05.md) documents the PCI
-bus-range guard, isolated plugin endpoints and fallback. The BF-3
-deployment/results below are historical.
+See [four-rail validation](four-rail-validation-2026-11-05.md) for the
+four-rail mapping, jumbo-MTU procedure, exact results and limits. The
+[two-rail validation](two-rail-validation-2026-11-05.md) (MTU 1500/1024)
+and the [one-VF recovery record](recovery-2026-11-05.md) remain as
+fallbacks. The BF-3 deployment/results below are historical.
 
 ## What is RDMA (and what this use case validates)
 
@@ -57,8 +60,9 @@ on both VMs and traffic tests pass: ~350 Gb/s single-QP, 370 Gb/s at 16 QPs,
 
 ## Menu
 
-Current profile: [two-rail CX-8 validation](two-rail-validation-2026-11-05.md).
-Recovery/fallback: [one-VF CX-8 baseline](recovery-2026-11-05.md).
+Current profile: [four-rail CX-8 validation](four-rail-validation-2026-11-05.md).
+Fallbacks: [two-rail CX-8 validation](two-rail-validation-2026-11-05.md) and
+[one-VF CX-8 baseline](recovery-2026-11-05.md).
 
 1. [Read-only NIC inventory](#read-only-nic-inventory-2026-11-02)
 2. [Operator installation](#operator-installation) (+ HCP scheduling fixes)
@@ -80,9 +84,12 @@ The shim binary now supports concurrent resources through distinct socket
 names; see `bf3-shim/main_test.go` and the recovery record.
 
 The live two-rail profile adds `10-cx8-two-rails-vm.patch.yaml` and
-`11-cx8-two-rails-plugin.patch.json` to that baseline. These are patches,
-not apply manifests. See the two-rail report for serial rollout, networking
-and rollback instructions; do not bulk-apply this directory.
+`11-cx8-two-rails-plugin.patch.json` to that baseline; the four-rail
+profile adds `12-cx8-four-rails-vm.patch.yaml` and
+`13-cx8-four-rails-plugin.patch.json`. These are patches,
+not apply manifests. See the four-rail report for serial rollout, jumbo-MTU
+procedure, networking and rollback instructions; do not bulk-apply this
+directory.
 
 ## Read-only NIC inventory (2026-11-02)
 
