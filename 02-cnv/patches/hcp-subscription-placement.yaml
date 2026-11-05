@@ -1,0 +1,15 @@
+# Merge patch for the CNV Subscription (separate from HCO-managed workloads):
+# oc patch subscription kubevirt-hyperconverged -n openshift-cnv \
+#   --type=merge --patch-file=02-cnv/patches/hcp-subscription-placement.yaml
+# OLM owns the operator deployment; do not patch that deployment directly.
+spec:
+  config:
+    nodeSelector:
+      node-role.kubernetes.io/worker: ""
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: node-role.kubernetes.io/worker
+              operator: Exists

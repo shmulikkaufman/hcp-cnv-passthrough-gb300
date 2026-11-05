@@ -9,3 +9,5 @@ pull-secret.json
 07-rdma/bf3-shim/bf3-shim
 # external reference document (internal NVIDIA LaunchPad guide) — not for publication
 rdma-gb300.html
+# Local Python test artifacts
+__pycache__/

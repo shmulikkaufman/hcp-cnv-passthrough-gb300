@@ -1,0 +1,23 @@
+# Merge patch for an existing VM, not an apply manifest. Example:
+# oc create configmap pci-expander-bus-guard -n gpu-vm-test \
+#   --from-file=pci_bus_guard.py=07-rdma/pci_bus_guard.py \
+#   --dry-run=client -o yaml | oc apply -f -
+# Stop ONE VM, wait for its VMI deletion, then:
+# oc patch vm <name> -n gpu-vm-test --type=merge \
+#   --patch-file=07-rdma/09-cx8-baseline.patch.yaml
+# Start it and verify guest SSH before working on the other VM.
+# This replaces hostDevices and the hook annotation: inspect existing values
+# before using it on any VM other than the documented vm3/vm12 baseline.
+# Does NOT change GPU requests, disks, firmware, MMIO, or NUMA nodes.
+spec:
+  template:
+    metadata:
+      annotations:
+        hooks.kubevirt.io/hookSidecars: >-
+          [{"image":"registry.redhat.io/container-native-virtualization/sidecar-shim-rhel9@sha256:d02f1a2cb05dc469ed916800979deef8a1967361728b2c7bc01fb952fe6e8a3d","args":["--version","v1alpha3"],"configMap":{"name":"pci-expander-bus-guard","hookPath":"/usr/bin/onDefineDomain","key":"pci_bus_guard.py"}}]
+    spec:
+      domain:
+        devices:
+          hostDevices:
+          - name: cx8nic0
+            deviceName: openshift.io/cx8_roce_vf

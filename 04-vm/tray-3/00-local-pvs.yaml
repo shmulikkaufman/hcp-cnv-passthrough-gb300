@@ -1,0 +1,55 @@
+# Tray-3 local storage — same pattern as tray-12. Create backing directories
+# on the node first (owner 107:107, SELinux container_file_t).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gpu-vm-tray-3-root-pv
+spec:
+  capacity:
+    storage: 140Gi
+  accessModes:
+  - ReadWriteOnce
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-hostpath
+  claimRef:
+    namespace: gpu-vm-test
+    name: gpu-vm-tray-3-root
+  hostPath:
+    path: /var/local/kubevirt/gpu-vm-tray-3-root
+    type: Directory
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - compute-tray-3
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gpu-vm-tray-3-scratch-pv
+spec:
+  capacity:
+    storage: 140Gi
+  accessModes:
+  - ReadWriteOnce
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-hostpath
+  claimRef:
+    namespace: gpu-vm-test
+    name: gpu-vm-tray-3-root-scratch
+  hostPath:
+    path: /var/local/kubevirt/gpu-vm-tray-3-scratch
+    type: Directory
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - compute-tray-3

@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"flag"
 	"fmt"
 	"log"
@@ -32,15 +33,18 @@ import (
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
-const (
-	pluginEndpoint = "bf3-shim.sock"
-)
-
 type shimServer struct {
 	pluginapi.UnimplementedDevicePluginServer
 	resourceName string
 	sysfsPrefix  string
 	devices      []string // PCI addresses (BDF), e.g. 0016:01:00.1
+}
+
+// Each resource needs its own endpoint in kubelet's shared plugin directory.
+// A fixed name lets one plugin unlink another resource's live socket.
+func pluginEndpoint(resource string) string {
+	digest := sha256.Sum256([]byte(resource))
+	return fmt.Sprintf("pci-shim-%x.sock", digest[:12])
 }
 
 // envVarName replicates kubevirt's util.ResourceNameToEnvVar("PCI_RESOURCE", resource):
@@ -122,6 +126,10 @@ func (s *shimServer) ListAndWatch(_ *pluginapi.Empty, stream pluginapi.DevicePlu
 
 func (s *shimServer) Allocate(ctx context.Context, req *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	resp := &pluginapi.AllocateResponse{}
+	allowed := make(map[string]bool, len(s.devices))
+	for _, id := range s.devices {
+		allowed[id] = true
+	}
 	for _, cr := range req.ContainerRequests {
 		ids := make([]string, 0, len(cr.DevicesIds))
 		// DeviceSpecs (not Mounts): kubelet creates the node in the container
@@ -131,6 +139,9 @@ func (s *shimServer) Allocate(ctx context.Context, req *pluginapi.AllocateReques
 			{HostPath: "/dev/vfio/vfio", ContainerPath: "/dev/vfio/vfio", Permissions: "mrw"},
 		}
 		for _, id := range cr.DevicesIds {
+			if !allowed[id] || !s.healthyDevice(id) {
+				return nil, fmt.Errorf("device %q is not an advertised, vfio-pci-bound device", id)
+			}
 			ids = append(ids, id)
 			// legacy VFIO group device
 			dev, err := s.iommuGroupDev(id)
@@ -158,7 +169,8 @@ func (s *shimServer) PreStartContainer(context.Context, *pluginapi.PreStartConta
 }
 
 func serve(s *shimServer) error {
-	socketPath := filepath.Join(pluginapi.DevicePluginPath, pluginEndpoint)
+	endpoint := pluginEndpoint(s.resourceName)
+	socketPath := filepath.Join(pluginapi.DevicePluginPath, endpoint)
 	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -168,10 +180,13 @@ func serve(s *shimServer) error {
 	}
 	// Sockets in the device plugin dir must be accessible by kubelet.
 	if err := os.Chmod(socketPath, 0o660); err != nil {
+		lis.Close()
 		return err
 	}
 
 	grpcServer := grpc.NewServer()
+	defer grpcServer.Stop()
+	defer lis.Close()
 	pluginapi.RegisterDevicePluginServer(grpcServer, s)
 
 	// Serve BEFORE registering: kubelet dials back to our socket for
@@ -190,9 +205,11 @@ func serve(s *shimServer) error {
 		}
 		defer conn.Close()
 		client := pluginapi.NewRegistrationClient(conn)
-		_, err = client.Register(context.Background(), &pluginapi.RegisterRequest{
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		_, err = client.Register(ctx, &pluginapi.RegisterRequest{
 			Version:      pluginapi.Version,
-			Endpoint:     pluginEndpoint,
+			Endpoint:     endpoint,
 			ResourceName: s.resourceName,
 		})
 		return err
@@ -205,9 +222,17 @@ func serve(s *shimServer) error {
 	log.Printf("registered %s with kubelet (devices: %v)", s.resourceName, s.devices)
 
 	// If kubelet restarts it removes our socket; recreate and re-register.
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
 		for {
-			time.Sleep(10 * time.Second)
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+			}
 			if _, err := os.Stat(socketPath); os.IsNotExist(err) {
 				log.Printf("socket %s disappeared (kubelet restart?); stopping server", socketPath)
 				grpcServer.Stop()
@@ -237,7 +262,7 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		<-sigCh
-		os.Remove(filepath.Join(pluginapi.DevicePluginPath, pluginEndpoint))
+		os.Remove(filepath.Join(pluginapi.DevicePluginPath, pluginEndpoint(s.resourceName)))
 		os.Exit(0)
 	}()
 

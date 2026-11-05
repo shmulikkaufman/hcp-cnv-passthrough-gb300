@@ -1,0 +1,18 @@
+# Two-rail profile for the existing VM3 and VM12 objects.
+# Prerequisites: tested PCI guard from 09-cx8-baseline.patch.yaml, and shims
+# advertising exactly 0000:03:00.2 + 0002:03:00.2 on the corresponding host.
+# This is a MERGE PATCH, not an apply manifest. It replaces hostDevices only.
+# Stop ONE VM, wait for VMI deletion, then:
+# oc patch vm <name> -n gpu-vm-test --type=merge \
+#   --patch-file=07-rdma/10-cx8-two-rails-vm.patch.yaml
+# Start it and verify guest SSH before changing the other VM.
+spec:
+  template:
+    spec:
+      domain:
+        devices:
+          hostDevices:
+          - name: cx8nic0
+            deviceName: openshift.io/cx8_roce_vf
+          - name: cx8nic1
+            deviceName: openshift.io/cx8_roce_vf

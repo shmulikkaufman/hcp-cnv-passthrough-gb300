@@ -1,0 +1,16 @@
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: gpu-vm-tray-3-root
+  namespace: gpu-vm-test
+spec:
+  contentType: kubevirt
+  source:
+    upload: {}
+  storage:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 120Gi
+    storageClassName: local-hostpath

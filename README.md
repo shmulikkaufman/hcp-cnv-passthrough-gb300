@@ -374,6 +374,31 @@ oc get csv -n openshift-cnv           # Succeeded
 oc get pods -n openshift-cnv | head   # virt-operator, virt-handler, cdi, etc.
 ```
 
+### HCP placement: workers only (corrected 2026-11-04)
+
+Do not label HCP workers as Kubernetes masters to schedule operators. The
+control plane remains hosted on the hub. Configure CNV infrastructure and
+the OLM-managed operator to select workers explicitly:
+
+```bash
+# Merge patches for the existing objects; these files are not apply manifests.
+oc patch hyperconverged kubevirt-hyperconverged -n openshift-cnv \
+  --type=merge --patch-file=02-cnv/patches/hcp-worker-placement.yaml
+oc patch subscription kubevirt-hyperconverged -n openshift-cnv \
+  --type=merge --patch-file=02-cnv/patches/hcp-subscription-placement.yaml
+```
+
+The HCO v1 field is `spec.deployment.nodePlacements.infra`. Explicit worker
+affinity replaces the default master/control-plane affinity. The Subscription
+patch controls the operator deployment separately through OLM. Neither patch
+changes VM placement, device permissions, or the GPU/NIC resource providers.
+
+Wait for CNV deployments to finish rolling out and verify their required
+affinity no longer depends on master/control-plane labels before removing
+any old `node-role.kubernetes.io/master` labels. This cleanup was completed
+on tray-11/12 on 2026-11-04: both report `Ready worker`, CNV/SR-IOV stayed
+healthy, and both VMIs kept their original UIDs without restarts.
+
 ## 2.1 Enable AIE (mandatory for GB300 passthrough on CNV 4.22)
 
 AIE (Accelerated Infrastructure Enablement) provides the NVIDIA-tuned
@@ -1148,6 +1173,20 @@ peer access is automatic where supported, so `cudaMemcpyPeer` and
 # Phase 7 — VM-to-VM RDMA (BlueField-3 VF passthrough)
 
 Full details, manifests and incident records in `07-rdma/README.md`.
+
+**Latest active profile (2026-11-05): two CX-8 rails between VM3 and VM12.**
+Both guests boot with two GPU requests and **two selected CX-8 VFs each**;
+VM11 is stopped. Concurrent independent RDMA streams measured **727.14 Gb/s
+one-way combined** and **1,448.48 Gb/s full-duplex aggregate**, with each
+rail independently sustaining 363.77 Gb/s. No bond is configured.
+A per-VM PCI bus-range guard repairs overlapping generated PCI expander
+ranges, and the CX-8 shim uses a separate resource-specific socket from
+the BF-3 shim. Interface-local ARP settings prevent replies across the two
+test interfaces. See [two-rail validation](07-rdma/two-rail-validation-2026-11-05.md)
+for exact mapping, test commands, results and limits, and
+[the one-VF fallback](07-rdma/recovery-2026-11-05.md) for the lab-workaround
+scope and rollback. Four rails, bonding/LAG, jumbo MTU and GPUDirect remain
+unqualified. The BF-3 results below are historical, not the current pair.
 
 **Status (2026-11-03): FULLY VALIDATED.** Each guest has its 2x GB300 plus
 one BlueField-3 ConnectX-7 VF (`15b3:101e`) with RDMA port ACTIVE, and

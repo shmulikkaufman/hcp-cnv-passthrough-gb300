@@ -1,0 +1,19 @@
+# Merge patch for an existing HCO v1 object (not a replacement manifest):
+# oc patch hyperconverged kubevirt-hyperconverged -n openshift-cnv \
+#   --type=merge --patch-file=02-cnv/patches/hcp-worker-placement.yaml
+# HCP hosts its control plane separately; CNV infrastructure runs on workers.
+# Explicit affinity replaces the default master/control-plane requirement.
+# Keep VM workload placement and permittedHostDevices unchanged.
+spec:
+  deployment:
+    nodePlacements:
+      infra:
+        nodeSelector:
+          node-role.kubernetes.io/worker: ""
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: node-role.kubernetes.io/worker
+                  operator: Exists

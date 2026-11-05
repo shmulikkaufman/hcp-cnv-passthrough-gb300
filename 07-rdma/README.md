@@ -1,32 +1,46 @@
-# VM-to-VM RDMA on compute-tray-11 and compute-tray-12
+# VM-to-VM RoCE RDMA on GB300
+
+**Current tested profile (2026-11-05):** `gpu-vm-tray-3` and
+`gpu-vm-tray-12` each have **2 GPU requests + 2 CX-8 VFs**, with guest SSH and
+both rails passing RDMA tests. Concurrent streams measured **727.14 Gb/s
+one-way combined** and **1,448.48 Gb/s full-duplex aggregate**. VM11 is
+stopped; no BF-3 VF is attached to the active pair. **No bond is configured.**
+
+See [two-rail validation](two-rail-validation-2026-11-05.md) for the physical
+VF-to-guest mapping, interface-local ARP fix, exact test procedure and results.
+The [one-VF recovery record](recovery-2026-11-05.md) documents the PCI
+bus-range guard, isolated plugin endpoints and fallback. The BF-3
+deployment/results below are historical.
 
 ## What is RDMA (and what this use case validates)
 
 **RDMA (Remote Direct Memory Access)** lets a network adapter read and write
 an application's memory on a remote machine *directly* — the NIC DMAs data
-to/from user-space buffers with no kernel involvement, no socket buffers, no
-context switches and no CPU copies on the data path. That is what gives RDMA
-its two defining properties: **microsecond latency** and **line-rate
-bandwidth at near-zero CPU load**, where a TCP/IP stack would spend cycles on
-interrupts, protocol processing and double copies. **RoCEv2** (RDMA over
+to/from registered application buffers, bypassing the normal kernel socket
+data path and avoiding its intermediate CPU copies. This enables low latency
+and high bandwidth. Setup, memory registration, queue submission and completion
+polling still use CPU; these tests do not establish near-zero CPU usage.
+**RoCEv2** (RDMA over
 Converged Ethernet) carries the InfiniBand verbs protocol over standard
 Ethernet/UDP; each RDMA port is identified by a **GID** (for RoCEv2, derived
 from the interface's IP address), and standard verbs tools
 (`ibv_devinfo`, perftest `ib_write_bw`/`ib_write_lat`) drive the data path.
 
-**In this deployment**, one BlueField-3 ConnectX-7 VF is passed through to
-each VM (raw PCI passthrough — the guest kernel's own `mlx5` driver provides
-the verbs). The VM-to-VM validation then proves, in order:
+**In the current deployment**, two CX-8 VFs are passed through to each active VM
+(raw PCI passthrough — the guest kernel's own `mlx5` driver provides the
+verbs). The earlier BF-3 validation used the same attachment pattern. The
+VM-to-VM validation checks, in order:
 
 1. **Device exposure** — the guest sees the VF (`lspci`), its driver binds,
    and the RDMA port reaches `ACTIVE` at the verbs layer.
 2. **Working data path** — real RDMA verbs transfers between the two guests
    (`ib_write_bw` in both directions, `ib_write_lat`): memory on one VM is
    written remotely by the other VM's NIC.
-3. **Path isolation** — the traffic demonstrably traverses *only* the BF-3
-   VFs, never the virtio/masquerade management network: RDMA hardware
-   counters on `mlx5_0` account for exactly the test's operations, and the
-   measured bandwidth is far beyond anything virtio can carry.
+3. **Test-path verification** — explicit RDMA device/GID binding, VF peer
+   routes and RDMA hardware-counter deltas identify the path used by the
+   test. This does not enforce a policy preventing all other VM traffic from
+   using the virtio/masquerade management network. Bandwidth alone is not
+   proof of which interface carried traffic.
 4. **Performance sanity** — results in the expected range for a 400G VF
    (hundreds of Gb/s, single-digit-µs latency).
 
@@ -37,11 +51,14 @@ production loads.
 Current scope is **basic system-memory RoCE RDMA** between the two Ready,
 two-GB300 VMs. GPUDirect RDMA is a separate future qualification.
 
-**Status: VM-to-VM RDMA VALIDATED (2026-11-03).** Device exposure complete
+**Historical BF-3 result (2026-11-03): VM-to-VM RDMA VALIDATED.** Device exposure complete
 on both VMs and traffic tests pass: ~350 Gb/s single-QP, 370 Gb/s at 16 QPs,
 2.4 µs write latency, isolation proven via RDMA HW counters.
 
 ## Menu
+
+Current profile: [two-rail CX-8 validation](two-rail-validation-2026-11-05.md).
+Recovery/fallback: [one-VF CX-8 baseline](recovery-2026-11-05.md).
 
 1. [Read-only NIC inventory](#read-only-nic-inventory-2026-11-02)
 2. [Operator installation](#operator-installation) (+ HCP scheduling fixes)
@@ -55,6 +72,17 @@ Manifests in this directory: `00`–`03` SR-IOV operator setup ·
 `06` standalone sriov plugin (superseded) · `07` shim DaemonSet ·
 `bf3-shim/` shim source · `rdma-vm2vm-test.sh` self-contained VM-to-VM RDMA
 test (server + client modes; validated 2026-11-03, all tests pass).
+
+Current CX-8 files: `08-cx8-shim-ds.yaml` (one selected VF per worker),
+`09-cx8-baseline.patch.yaml` (merge patch, **not** an apply manifest),
+`pci_bus_guard.py` and `test_pci_bus_guard.py` (per-VM PCI range guard).
+The shim binary now supports concurrent resources through distinct socket
+names; see `bf3-shim/main_test.go` and the recovery record.
+
+The live two-rail profile adds `10-cx8-two-rails-vm.patch.yaml` and
+`11-cx8-two-rails-plugin.patch.json` to that baseline. These are patches,
+not apply manifests. See the two-rail report for serial rollout, networking
+and rollback instructions; do not bulk-apply this directory.
 
 ## Read-only NIC inventory (2026-11-02)
 
@@ -92,14 +120,14 @@ pods to be healthy. Check the generated `SriovOperatorConfig` and
 Two fixes were required because this guest cluster is a hosted control plane
 with worker-only nodes:
 
-1. The CSV deployment hard-requires `node-role.kubernetes.io/master`, which
-   does not exist in the guest cluster, so the operator pod stayed Pending and
-   the CSV timed out to `Failed`. Fix (user-approved): both workers were
-   labeled `node-role.kubernetes.io/master=` so the pod schedules. Rollback is
-   `oc label node <node> node-role.kubernetes.io/master-`. The subscription
-   also carries the documented HCP `spec.config.nodeSelector`
-   (`node-role.kubernetes.io/worker: ""`) as belt-and-suspenders; see
-   "Deploy the SR-IOV Operator for hosted control planes" in the 4.22 docs.
+1. The CSV initially required `node-role.kubernetes.io/master`, so the
+   operator pod stayed Pending. Both workers temporarily received that label
+   as a user-approved workaround. **That workaround was removed on
+   2026-11-04; do not repeat it.** The persistent SR-IOV fix is the
+   Subscription's `spec.config.nodeSelector` selecting
+   `node-role.kubernetes.io/worker: ""`; the live operator deployment now
+   uses this selector. See "Deploy the SR-IOV Operator for hosted control
+   planes" in the 4.22 docs.
 2. The OLM subscription does not create the default `SriovOperatorConfig`,
    which the CVO normally provides; without it the operator logs "default
    SriovOperatorConfig object not found" and stays idle.
@@ -113,6 +141,15 @@ After these fixes, all operator workloads are Running on both workers
 confirmed the BlueField-3 PF inventory on both nodes: `enP22s22np0` at
 `0016:01:00.0`, `15b3:a2dc`, 400 Gb/s ETH link up, `totalvfs: 16`,
 `eSwitchMode: legacy`, MTU 1500, driver `mlx5_core`.
+
+Before removing the temporary master labels, CNV infrastructure placement
+also needed an explicit worker override: some CNV deployments had acquired
+required master/control-plane affinity. HCO v1
+`spec.deployment.nodePlacements.infra` and the CNV Subscription's placement
+were updated, their rollouts verified, then the labels were removed. Both
+trays now show `Ready worker`; both VMIs remained Running/Ready with unchanged
+UIDs, and GPU/NIC resources remained advertised. Reusable patches are in
+`../02-cnv/patches/`; see the main README's HCP placement section.
 
 ## Required fabric input before enabling VFs/VM interfaces
 

@@ -1,0 +1,128 @@
+# CX-8 shim — second instance of the same bf3-shim binary, advertising the
+# CX-8 VF (0000:03:00.2, from PF 0000:03:00.0 / enp3s0f0np0) as a separate
+# resource. VF device ID is 15b3:101e (same as BF-3 VF).
+# Recovery baseline (2026-11-05): advertise ONLY the selected rail on both
+# nodes. The updated binary uses a distinct socket per resource; do not use
+# the older /var/local/bf3-shim binary for this CX-8 instance.
+# Build bf3-shim/ and install it atomically at the path below on both nodes.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cx8-shim
+  namespace: sriov-standalone
+  labels:
+    app: cx8-shim
+spec:
+  selector:
+    matchLabels:
+      app: cx8-shim
+  template:
+    metadata:
+      labels:
+        app: cx8-shim
+    spec:
+      serviceAccountName: vf-supply
+      nodeSelector:
+        kubernetes.io/hostname: compute-tray-3
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: cx8-shim
+        image: registry.redhat.io/rhel9/support-tools:latest
+        command: ["/var/local/cx8-shim/device-plugin"]
+        args:
+        - -resource=openshift.io/cx8_roce_vf
+        - -devices=0000:03:00.2
+        - -sysfs=/host-sys
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - name: shim-binary
+          mountPath: /var/local/cx8-shim
+          readOnly: true
+        - name: device-plugins
+          mountPath: /var/lib/kubelet/device-plugins
+        - name: host-sys
+          mountPath: /host-sys
+          readOnly: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 50Mi
+      volumes:
+      - name: shim-binary
+        hostPath:
+          path: /var/local/cx8-shim
+          type: Directory
+      - name: device-plugins
+        hostPath:
+          path: /var/lib/kubelet/device-plugins
+          type: Directory
+      - name: host-sys
+        hostPath:
+          path: /sys
+          type: Directory
+---
+# Second instance for tray-12
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cx8-shim-tray12
+  namespace: sriov-standalone
+  labels:
+    app: cx8-shim
+    tray: "12"
+spec:
+  selector:
+    matchLabels:
+      app: cx8-shim
+      tray: "12"
+  template:
+    metadata:
+      labels:
+        app: cx8-shim
+        tray: "12"
+    spec:
+      serviceAccountName: vf-supply
+      nodeSelector:
+        kubernetes.io/hostname: compute-tray-12
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: cx8-shim
+        image: registry.redhat.io/rhel9/support-tools:latest
+        command: ["/var/local/cx8-shim/device-plugin"]
+        args:
+        - -resource=openshift.io/cx8_roce_vf
+        - -devices=0000:03:00.2
+        - -sysfs=/host-sys
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - name: shim-binary
+          mountPath: /var/local/cx8-shim
+          readOnly: true
+        - name: device-plugins
+          mountPath: /var/lib/kubelet/device-plugins
+        - name: host-sys
+          mountPath: /host-sys
+          readOnly: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 50Mi
+      volumes:
+      - name: shim-binary
+        hostPath:
+          path: /var/local/cx8-shim
+          type: Directory
+      - name: device-plugins
+        hostPath:
+          path: /var/lib/kubelet/device-plugins
+          type: Directory
+      - name: host-sys
+        hostPath:
+          path: /sys
+          type: Directory
