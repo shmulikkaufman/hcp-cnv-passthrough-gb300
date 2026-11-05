@@ -28,6 +28,31 @@ the base VM manifest so the hook ConfigMap dependency is explicit.
 
 Guest SSH and system-memory RDMA to VM12 were verified. See
 [the two-rail report](../../07-rdma/two-rail-validation-2026-11-05.md) for
-temporary addresses, ARP settings, test commands and limitations. VM3's guest NVIDIA/CUDA
-driver installation remains a separate acceptance gate; two PCI GPUs in
-the guest are not proof of CUDA or GPUDirect functionality.
+temporary addresses, ARP settings, test commands and limitations.
+
+## Guest NVIDIA driver/CUDA — validated 2026-11-05
+
+Installed with the documented Phase 5 procedure
+(`05-guest-driver/install-nvidia-driver.sh`, driver 615.71.10, kernel-devel
+pinned to the running `6.12.0-259.26.el10nv`). The VM was registered with
+its own RHSM identity (org `11009103`, activation key supplied in chat;
+never stored). A guest-internal reboot loaded the module; the VMI kept its
+UID and stayed Running throughout — no worker or VMI restart.
+
+Verified after reboot:
+
+- `nvidia-smi`: **2x GB300**, driver 615.71.10, CUDA UMD 13.4, both GPUs
+  idle at P0 (~185 W each), 284208 MiB each.
+- Both GPUs bound to the `nvidia` driver; NVRM load line present with none
+  of the 4.21 failure signatures (`kmemsysSetupCoherentCpuLink`,
+  `kbusVerifyBar2`, `RmInitAdapter failed`). The DVSEC3 PDI,
+  `kbifCacheVFInfo` and FLA-sysmem dmesg lines are informational in a VM.
+- Driver-API probe (`06-cuda-test/cuda-driver-probe.py`): `cuInit`
+  CUDA_SUCCESS, **count: 2**, context create, 256 MiB alloc/free, PASS.
+- Both CX-8 VFs survived the reboot with RDMA ports ACTIVE/LINK_UP
+  (`mlx5_0`/`mlx5_1` on `enp254s0`/`enp255s0`).
+
+The guest reboot reset the temporary RDMA test networking (test IPs, ARP
+sysctls, NM-unmanaged state), as documented — re-apply it from the two-rail
+report before re-running RDMA tests. Validation log on the bastion:
+`maintenance/20261105T113831Z-vm3-cuda-driver/validation.log`.

@@ -1188,6 +1188,12 @@ for exact mapping, test commands, results and limits, and
 scope and rollback. Four rails, bonding/LAG, jumbo MTU and GPUDirect remain
 unqualified. The BF-3 results below are historical, not the current pair.
 
+**VM3 guest NVIDIA driver/CUDA (2026-11-05): validated.** Driver 615.71.10
++ CUDA 13.4 installed via the Phase 5 procedure with VM3's own RHSM
+identity; `nvidia-smi` shows 2x GB300 and the driver-API probe passes
+(context create, 256 MiB alloc/free) — both active VMs now meet the same
+GPU-ready standard. Details in [`04-vm/tray-3/README.md`](04-vm/tray-3/README.md).
+
 **Status (2026-11-03): FULLY VALIDATED.** Each guest has its 2x GB300 plus
 one BlueField-3 ConnectX-7 VF (`15b3:101e`) with RDMA port ACTIVE, and
 VM-to-VM RoCE traffic tests pass:

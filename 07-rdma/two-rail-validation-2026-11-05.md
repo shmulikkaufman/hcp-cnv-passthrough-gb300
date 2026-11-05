@@ -117,7 +117,10 @@ Write latency, 2 bytes and 1,000 iterations:
 Post-test checks: both guest SSH endpoints and agents remain healthy; both
 workers and their boot IDs are unchanged. VM12's CUDA driver probe still
 reports two GPUs and passes context creation and a 256 MiB allocation/free.
-VM3's guest CUDA driver installation remains unvalidated, as before.
+VM3's guest NVIDIA driver/CUDA was installed and validated later the same
+day (see `04-vm/tray-3/README.md`); its guest-internal reboot reset the
+temporary test-network settings described above, which must be re-applied
+before re-running these RDMA tests.
 
 ## Matched example commands
 
