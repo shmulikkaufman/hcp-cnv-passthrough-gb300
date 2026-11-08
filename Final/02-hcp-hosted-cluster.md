@@ -3,7 +3,9 @@
 Create the hosted control plane, boot the ARM64 workers from it, then tune
 the workers for GPU VM hosting. Reference manifests: `configs/01-hcp/`
 (`hostedcluster.yaml`, `nodepool.yaml`, `infraenv.yaml`,
-`vm-host-tuning.md`).
+`vm-host-tuning.md`). Prerequisites: a prepared hub —
+[Chapter 1](01-prerequisites.md) or [Appendix C](appendix-c-hub-setup.md)
+if building one from zero.
 
 ## 2.1 Create the hosted cluster
 

@@ -111,6 +111,7 @@ Validated results (details and per-test evidence in
 | 8 | [RDMA & GPUDirect validation](08-rdma-and-gpudirect-validation.md) | manual SSH runbook, test suites, results, isolation proofs |
 | A | [Appendix A — issues & workarounds](appendix-a-issues-and-workarounds.md) | every problem hit, symptom → cause → fix |
 | B | [Appendix B — custom components](appendix-b-custom-components.md) | index of all non-standard components |
+| C | [Appendix C — hub cluster setup](appendix-c-hub-setup.md) | reference: building the hub from zero (installer, MCE, storage, `hcp` CLI) |
 
 ## Where the manifests live
 

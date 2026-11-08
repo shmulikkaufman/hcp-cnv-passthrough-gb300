@@ -24,6 +24,10 @@ An existing x86_64 OpenShift 5.0 cluster with:
   services as **NodePort on the hub address** (172.16.2.132), so MetalLB is
   not required.
 
+If you do not have a hub yet, [Appendix C](appendix-c-hub-setup.md) is the
+reference procedure for building one (installer, MCE + Hosted Control
+Planes, storage, `hcp` CLI) — note it was not re-validated in this build.
+
 ```bash
 export KUBECONFIG=$PWD/kubeconfig_hub   # hub kubeconfig
 ```
