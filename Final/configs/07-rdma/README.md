@@ -11,13 +11,13 @@ mlx5 stack) is validated** on the same profile: 390.25 Gb/s sustained
 GPU↔GPU per rail with byte-exact content verification. VM11 is stopped; no
 BF-3 VF is attached to the active pair. **No bond is configured.**
 
-See [four-rail validation](four-rail-validation-2026-11-05.md) for the
+See [four-rail validation](../../../archive/07-rdma/four-rail-validation-2026-11-05.md) for the
 four-rail mapping, jumbo-MTU procedure, exact results and limits, and
-[GPUDirect validation](gpudirect-validation-2026-11-05.md) for the
+[GPUDirect validation](../../../archive/07-rdma/gpudirect-validation-2026-11-05.md) for the
 GPU-memory RDMA results, the peermem root-cause analysis and the custom
 content-integrity test. The
-[two-rail validation](two-rail-validation-2026-11-05.md) (MTU 1500/1024)
-and the [one-VF recovery record](recovery-2026-11-05.md) remain as
+[two-rail validation](../../../archive/07-rdma/two-rail-validation-2026-11-05.md) (MTU 1500/1024)
+and the [one-VF recovery record](../../../archive/07-rdma/recovery-2026-11-05.md) remain as
 fallbacks. The BF-3 deployment/results below are historical.
 
 ## What is RDMA (and what this use case validates)
@@ -55,7 +55,7 @@ VM-to-VM validation checks, in order:
 Explicitly **out of scope** here: lossless-fabric tuning (PFC/ECN) for
 sustained production loads. GPUDirect RDMA (NIC DMA into GPU memory) was
 originally a later phase and **is now validated** — see
-[GPUDirect validation](gpudirect-validation-2026-11-05.md).
+[GPUDirect validation](../../../archive/07-rdma/gpudirect-validation-2026-11-05.md).
 
 Current scope is **system-memory RoCE RDMA** (this document) plus
 **GPUDirect RDMA via dma-buf** (that report) between the two Ready,
@@ -67,10 +67,10 @@ on both VMs and traffic tests pass: ~350 Gb/s single-QP, 370 Gb/s at 16 QPs,
 
 ## Menu
 
-Current profile: [four-rail CX-8 validation](four-rail-validation-2026-11-05.md)
-and [GPUDirect (dma-buf) validation](gpudirect-validation-2026-11-05.md).
-Fallbacks: [two-rail CX-8 validation](two-rail-validation-2026-11-05.md) and
-[one-VF CX-8 baseline](recovery-2026-11-05.md).
+Current profile: [four-rail CX-8 validation](../../../archive/07-rdma/four-rail-validation-2026-11-05.md)
+and [GPUDirect (dma-buf) validation](../../../archive/07-rdma/gpudirect-validation-2026-11-05.md).
+Fallbacks: [two-rail CX-8 validation](../../../archive/07-rdma/two-rail-validation-2026-11-05.md) and
+[one-VF CX-8 baseline](../../../archive/07-rdma/recovery-2026-11-05.md).
 
 1. [Read-only NIC inventory](#read-only-nic-inventory-2026-11-02)
 2. [Operator installation](#operator-installation) (+ HCP scheduling fixes)
@@ -91,8 +91,8 @@ Current CX-8 files: `08-cx8-shim-ds.yaml` (one selected VF per worker),
 The shim binary now supports concurrent resources through distinct socket
 names; see `bf3-shim/main_test.go` and the recovery record.
 
-The live two-rail profile adds `10-cx8-two-rails-vm.patch.yaml` and
-`11-cx8-two-rails-plugin.patch.json` to that baseline; the four-rail
+The live two-rail profile adds `../../../archive/07-rdma/10-cx8-two-rails-vm.patch.yaml` and
+`../../../archive/07-rdma/11-cx8-two-rails-plugin.patch.json` to that baseline; the four-rail
 profile adds `12-cx8-four-rails-vm.patch.yaml` and
 `13-cx8-four-rails-plugin.patch.json`. These are patches,
 not apply manifests. See the four-rail report for serial rollout, jumbo-MTU
@@ -240,7 +240,7 @@ three gaps, each bridged:
 | Gap (stock component) | Bridge |
 |---|---|
 | SR-IOV policy layer reboots nodes on the BF-3 (firmware NVRAM / `mlxconfig` path; manual runtime sysfs works fine) | `05-bf3-vf-supply.yaml`: runtime sysfs VF creation + vfio-pci bind DaemonSet |
-| SR-IOV device plugin emits `PCIDEVICE_*` env vars; KubeVirt's launcher only reads `PCI_RESOURCE_*` (confirmed by launcher logs and plugin source `pool_stub.go`) | `07-bf3-shim-ds.yaml` + `bf3-shim/`: external device plugin emitting the KubeVirt-style env var |
+| SR-IOV device plugin emits `PCIDEVICE_*` env vars; KubeVirt's launcher only reads `PCI_RESOURCE_*` (confirmed by launcher logs and plugin source `pool_stub.go`) | `../../../archive/07-rdma/07-bf3-shim-ds.yaml` + `bf3-shim/`: external device plugin emitting the KubeVirt-style env var |
 | KubeVirt internal plugin (`externalResourceProvider: false`) does not mount kernel-6.x per-device cdev `/dev/vfio/devices/vfioN` — **CNV-91802**, fixed only in CNV 5.0 (KubeVirt v1.9, PR #18300); libvirt needs it because the NVIDIA GPU plugin's cdev mounts make the cdev API "present" in every launcher | Same shim: `DeviceSpec`s for `/dev/vfio/<group>`, `/dev/vfio/vfio`, and cdevs discovered via sysfs `vfio-dev/` (re-read at every Allocate; minors are not reboot-stable) |
 
 Architectural reference: the user's validated x86 project
@@ -267,7 +267,7 @@ and mounts cdevs — the shim replicates that behavior for the NIC VF).
   (health = driver still `vfio-pci`). Allocate returns the
   `PCI_RESOURCE_*` env var plus DeviceSpecs (`mrw`) for the legacy group
   device, `/dev/vfio/vfio`, and `/dev/vfio/devices/vfioN`.
-- `06-sriovdp-standalone.yaml` is **superseded** by the shim (its DaemonSet
+- `../../../archive/07-rdma/06-sriovdp-standalone.yaml` is **superseded** by the shim (its DaemonSet
   was deleted); kept for reference.
 - The SR-IOV operator itself is still installed and healthy but only provides
   inventory; **no policies exist** (deliberately — see incident record).
@@ -312,14 +312,14 @@ Device exposure is COMPLETE on both VMs. Remaining work for traffic tests:
 1. Guest tooling: install `rdma-core` + `perftest` in both guests.
 2. Fabric addressing on the VF netdevs (`enp10s0`, currently no IPs; RoCEv2
    GIDs derive from IPs — see the fabric input section above, still pending).
-   Per the LaunchPad GB300 RoCE guide (`rdma-gb300.html`): use static unique
-   IPs per interface, resolve the RoCEv2 GID index by filtering
-   `gid_attrs/types/* == v2` and matching the IP, and set VF attributes
-   `trust on` / `spoof off` (can be added to the supply DaemonSet).
+   Use static unique IPs per interface, resolve the RoCEv2 GID index by
+   filtering `gid_attrs/types/* == v2` and matching the IP, and set VF
+   attributes `trust on` / `spoof off` (can be added to the supply
+   DaemonSet).
 3. Bidirectional `ib_write_bw` (system memory) between the guests.
 4. GPUDirect RDMA (`--use_cuda_dmabuf`, no peermem needed with the open
    driver) — **completed 2026-11-05**, see
-   [GPUDirect validation](gpudirect-validation-2026-11-05.md).
+   [GPUDirect validation](../../../archive/07-rdma/gpudirect-validation-2026-11-05.md).
 
 ### Traffic validation (2026-11-03, RFC-5737 probe addresses)
 
@@ -384,11 +384,11 @@ DaemonSet.
 
 Remaining: optional PFC/ECN lossless config for sustained production loads
 (not needed for validation — no loss observed). GPUDirect RDMA has since
-been validated — see [GPUDirect validation](gpudirect-validation-2026-11-05.md).
+been validated — see [GPUDirect validation](../../../archive/07-rdma/gpudirect-validation-2026-11-05.md).
 
 ## Incident record: VF policy triggered node reboot loop (2026-11-02, resolved)
 
-Applying `04-sriov-nodepolicy.yaml` (1 VF on `0016:01:00.0`, `deviceType:
+Applying `../../../archive/07-rdma/04-sriov-nodepolicy.yaml` (1 VF on `0016:01:00.0`, `deviceType:
 netdevice`, `isRdma: true`) caused both workers to reboot **simultaneously and
 repeatedly** (~4 reboots each). Journal evidence from both nodes shows this was
 **not a kernel panic**:

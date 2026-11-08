@@ -5,8 +5,8 @@ pull-secret.json
 *.iso
 .claude/
 # compiled shim binary — rebuild with:
-#   cd 07-rdma/bf3-shim && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o bf3-shim .
-07-rdma/bf3-shim/bf3-shim
+#   cd Final/configs/07-rdma/bf3-shim && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o bf3-shim .
+**/bf3-shim/bf3-shim
 # external reference document (internal NVIDIA LaunchPad guide) — not for publication
 rdma-gb300.html
 # Local Python test artifacts

@@ -28,13 +28,13 @@ separate from the base VM manifest so the hook ConfigMap dependency is
 explicit.
 
 Guest SSH and system-memory RDMA to VM12 were verified. See
-[the two-rail report](../../07-rdma/two-rail-validation-2026-11-05.md) for
+[the two-rail report](../../../../archive/07-rdma/two-rail-validation-2026-11-05.md) for
 temporary addresses, ARP settings, test commands and limitations.
 
 ## Guest NVIDIA driver/CUDA — validated 2026-11-05
 
 Installed with the documented Phase 5 procedure
-(`05-guest-driver/install-nvidia-driver.sh`, driver 615.71.10, kernel-devel
+(`../../05-guest-driver/install-nvidia-driver.sh`, driver 615.71.10, kernel-devel
 pinned to the running `6.12.0-259.26.el10nv`). The VM was registered with
 its own RHSM identity (org `11009103`, activation key supplied in chat;
 never stored). A guest-internal reboot loaded the module; the VMI kept its
@@ -48,7 +48,7 @@ Verified after reboot:
   of the 4.21 failure signatures (`kmemsysSetupCoherentCpuLink`,
   `kbusVerifyBar2`, `RmInitAdapter failed`). The DVSEC3 PDI,
   `kbifCacheVFInfo` and FLA-sysmem dmesg lines are informational in a VM.
-- Driver-API probe (`06-cuda-test/cuda-driver-probe.py`): `cuInit`
+- Driver-API probe (`../../06-cuda-test/cuda-driver-probe.py`): `cuInit`
   CUDA_SUCCESS, **count: 2**, context create, 256 MiB alloc/free, PASS.
 - Both CX-8 VFs survived the reboot with RDMA ports ACTIVE/LINK_UP
   (`mlx5_0`/`mlx5_1` on `enp254s0`/`enp255s0`).

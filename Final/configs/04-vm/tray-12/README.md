@@ -71,7 +71,7 @@ dedicated NIC/VF resources on **both** VMs and fabric validation.
 The VM now carries one BlueField-3 ConnectX-7 VF (`15b3:101e`) via KubeVirt
 `hostDevices` (resource `openshift.io/mellanox_bf3roce_vf`), attached when the
 VM was restarted ~13:04 UTC after the supply/shim stack was deployed — see
-`../07-rdma/README.md` for the full architecture. Validated in the guest:
+`../../07-rdma/README.md` for the full architecture. Validated in the guest:
 
 ```
 lspci:   0a:00.0 Mellanox ConnectX Family mlx5Gen Virtual Function [15b3:101e]

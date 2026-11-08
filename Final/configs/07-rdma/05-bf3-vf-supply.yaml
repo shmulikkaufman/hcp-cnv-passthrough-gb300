@@ -114,10 +114,10 @@ spec:
                 [ -n "$drv" ] && echo "$VF" > "$SYSD/bus/pci/devices/$VF/driver/unbind" 2>/dev/null || true
                 echo "$VF" > "$SYSD/bus/pci/drivers/vfio-pci/bind" 2>/dev/null || true
               fi
-              # VF attributes required for guest RDMA (LaunchPad GB300 RoCE
-              # guide, validated with NVIDIA): trust on (guest can set QP
-              # parameters), spoof_chk off (RDMA frames carrying non-Ethernet
-              # source MACs would otherwise be dropped by the VF's filter).
+              # VF attributes required for guest RDMA (validated with
+              # NVIDIA): trust on (guest can set QP parameters), spoof_chk
+              # off (RDMA frames carrying non-Ethernet source MACs would
+              # otherwise be dropped by the VF's filter).
               # NOTE: separate invocations — combining both options in one
               # command applies only the last one on this iproute2.
               # Requires hostNetwork for host-netns ip netlink operations.

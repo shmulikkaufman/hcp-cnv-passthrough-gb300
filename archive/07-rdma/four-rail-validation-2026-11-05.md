@@ -140,3 +140,25 @@ Audit evidence on the bastion under
 `maintenance/20261105T115239Z-four-cx8-rails/`: state backups, rail maps,
 `guest-four-rail-config.json`, `rdma-four-rail-results.json`,
 `jumbo-change.py`, `four-rail-test.py`, and all per-test logs.
+
+## Addendum: 4-vCPU update (2026-11-05, later the same day)
+
+Both VMs were patched from 2 to **4 dedicated vCPUs** (stop → patch
+`domain.cpu.cores` → start, serially; specs backed up in
+`maintenance/20261105T170000Z-4vcpu-align/`). With one rail per vCPU:
+
+- 4-rail concurrent one-way: **1,560.84 Gb/s** — full line rate on every
+  rail (390.08–390.28), vs 993.90 at 2 vCPUs. The earlier per-rail
+  ~248 Gb/s concurrent figure was purely the 2-vCPU CPU ceiling.
+- 4-rail concurrent bidirectional: **~2,656 Gb/s** aggregate (NUMA-0
+  rails ~775–778 full-duplex; NUMA-1 rails ~525–578).
+- GPUDirect 4-rail concurrent (new): **1,560.63 Gb/s** with buffers split
+  across both VM GPUs — full line rate; all-buffers-on-GPU-0 caps at
+  1,165.29 Gb/s (single-GPU host-interface bottleneck).
+
+Guest memlock set to unlimited for `cloud-user` (limits.conf) on both
+VMs. Operational notes: the VM restart reset the RDMA hardware counters
+to zero (clean baseline), guest netdev names shuffled again (rail↔HCA
+mapping held), and freshly-added IPv4 addresses are ARP-silent for a few
+seconds (DAD) — wait before testing. Full logs and summary in the
+maintenance directory above.

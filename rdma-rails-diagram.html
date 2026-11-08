@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VM-to-VM RDMA — four CX-8 rails</title>
+<style>
+  :root {
+    --purple: #7c3aed; --purple-dark: #4c1d95; --purple-fill: #f5f3ff;
+    --n0: #2563eb; --n0-dark: #1d4ed8;
+    --n1: #ea580c; --n1-dark: #c2410c;
+    --ink: #111827; --muted: #6b7280; --line: #e5e7eb;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; color: var(--ink);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 28px 24px 40px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 0 0 14px;
+            font-size: 12.5px; color: #374151; }
+  .legend .item { display: inline-flex; align-items: center; gap: 7px; }
+  .sw-vm   { width: 14px; height: 14px; border-radius: 3px; background: var(--purple); }
+  .sw-n0   { width: 22px; height: 4px; border-radius: 2px; background: var(--n0); }
+  .sw-n1   { width: 22px; height: 4px; border-radius: 2px; background: var(--n1); }
+  .sw-fab  { width: 18px; height: 14px; border: 2px dashed #94a3b8; border-radius: 3px; background: #f8fafc; }
+  svg { width: 100%; height: auto; display: block; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+           gap: 12px; margin-top: 20px; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .stat .v { font-size: 19px; font-weight: 700; }
+  .stat .l { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .note { font-size: 12.5px; color: var(--muted); margin-top: 16px; max-width: 760px; }
+  text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1>VM-to-VM RDMA — four CX-8 rails</h1>
+  <p class="sub">gpu-vm-tray-3 ↔ gpu-vm-tray-12 &nbsp;·&nbsp; validated 2026-11-05 &nbsp;·&nbsp; 4 vCPUs per VM (one rail per vCPU)</p>
+
+  <div class="legend">
+    <span class="item"><span class="sw-vm"></span>VM endpoint (KubeVirt guest)</span>
+    <span class="item"><span class="sw-n0"></span>NUMA-0 rail — GPU-local socket</span>
+    <span class="item"><span class="sw-n1"></span>NUMA-1 rail — cross-socket</span>
+    <span class="item"><span class="sw-fab"></span>shared L2 RoCE fabric</span>
+  </div>
+
+  <svg viewBox="0 0 960 520" role="img"
+       aria-label="Two virtual machines connected by four RDMA rails through a shared RoCE fabric, with measured bandwidth per rail: 390 gigabits per second one-way on every rail; NUMA-0 rails reach 775 to 778 gigabits per second full-duplex, NUMA-1 rails 525 to 578.">
+
+    <!-- ============ worker / VM boxes ============ -->
+    <rect x="16" y="70" width="210" height="380" rx="12"
+          fill="var(--purple-fill)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="121" y="100" text-anchor="middle" font-size="16" font-weight="700" fill="var(--purple-dark)">gpu-vm-tray-3</text>
+    <text x="121" y="120" text-anchor="middle" font-size="11" fill="var(--muted)">VM3 · worker compute-tray-3</text>
+    <text x="121" y="136" text-anchor="middle" font-size="11" fill="var(--muted)">RHEL 10.2 arm64 · 4 vCPUs</text>
+    <text x="121" y="152" text-anchor="middle" font-size="11" fill="var(--muted)">2× GB300 GPUs</text>
+    <line x1="36" y1="166" x2="206" y2="166" stroke="#ddd6fe" stroke-width="1"/>
+    <!-- GPU chips -->
+    <rect x="36"  y="404" width="76" height="28" rx="6" fill="#ede9fe" stroke="var(--purple)" stroke-width="1"/>
+    <rect x="122" y="404" width="76" height="28" rx="6" fill="#ede9fe" stroke="var(--purple)" stroke-width="1"/>
+    <text x="74"  y="422" text-anchor="middle" font-size="11" font-weight="600" fill="var(--purple-dark)">GB300</text>
+    <text x="160" y="422" text-anchor="middle" font-size="11" font-weight="600" fill="var(--purple-dark)">GB300</text>
+    <text x="121" y="449" text-anchor="middle" font-size="9" fill="var(--muted)">NVLink-interconnected pair</text>
+
+    <rect x="734" y="70" width="210" height="380" rx="12"
+          fill="var(--purple-fill)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="839" y="100" text-anchor="middle" font-size="16" font-weight="700" fill="var(--purple-dark)">gpu-vm-tray-12</text>
+    <text x="839" y="120" text-anchor="middle" font-size="11" fill="var(--muted)">VM12 · worker compute-tray-12</text>
+    <text x="839" y="136" text-anchor="middle" font-size="11" fill="var(--muted)">RHEL 10.2 arm64 · 4 vCPUs</text>
+    <text x="839" y="152" text-anchor="middle" font-size="11" fill="var(--muted)">2× GB300 GPUs</text>
+    <line x1="754" y1="166" x2="924" y2="166" stroke="#ddd6fe" stroke-width="1"/>
+    <rect x="754" y="404" width="76" height="28" rx="6" fill="#ede9fe" stroke="var(--purple)" stroke-width="1"/>
+    <rect x="840" y="404" width="76" height="28" rx="6" fill="#ede9fe" stroke="var(--purple)" stroke-width="1"/>
+    <text x="792" y="422" text-anchor="middle" font-size="11" font-weight="600" fill="var(--purple-dark)">GB300</text>
+    <text x="878" y="422" text-anchor="middle" font-size="11" font-weight="600" fill="var(--purple-dark)">GB300</text>
+    <text x="839" y="449" text-anchor="middle" font-size="9" fill="var(--muted)">NVLink-interconnected pair</text>
+
+    <!-- ============ fabric container ============ -->
+    <rect x="330" y="104" width="300" height="326" rx="12"
+          fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="7 5"/>
+    <text x="480" y="130" text-anchor="middle" font-size="13" font-weight="700" fill="#475569">RoCEv2 fabric</text>
+    <text x="480" y="146" text-anchor="middle" font-size="10" fill="#64748b">shared L2 · MTU 9000 · best-effort</text>
+
+    <!-- ============ rail 0 · gpu0p0 · NUMA 0 ============ -->
+    <line x1="222" y1="200" x2="390" y2="200" stroke="var(--n0)" stroke-width="3.5"/>
+    <line x1="570" y1="200" x2="738" y2="200" stroke="var(--n0)" stroke-width="3.5"/>
+    <text x="306" y="190" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--n0-dark)">390 Gb/s one-way</text>
+    <text x="306" y="216" text-anchor="middle" font-size="10" fill="var(--muted)">775–778 Gb/s full-duplex</text>
+    <rect x="390" y="177" width="180" height="46" rx="10" fill="var(--n0)"/>
+    <text x="480" y="198" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">rail gpu0p0 · NUMA 0</text>
+    <text x="480" y="214" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.85)" class="mono">PF 0000:03:00.0 · 400G</text>
+    <rect x="204" y="191" width="18" height="18" rx="3" fill="var(--purple)"/>
+    <rect x="738" y="191" width="18" height="18" rx="3" fill="var(--purple)"/>
+    <text x="196" y="205" text-anchor="end" font-size="10" fill="var(--purple-dark)" class="mono">VF 0000:03:00.2</text>
+    <text x="762" y="205" text-anchor="start" font-size="10" fill="var(--purple-dark)" class="mono">VF 0000:03:00.2</text>
+
+    <!-- ============ rail 1 · gpu1p0 · NUMA 0 ============ -->
+    <line x1="222" y1="270" x2="390" y2="270" stroke="var(--n0)" stroke-width="3.5"/>
+    <line x1="570" y1="270" x2="738" y2="270" stroke="var(--n0)" stroke-width="3.5"/>
+    <text x="306" y="260" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--n0-dark)">390 Gb/s one-way</text>
+    <text x="306" y="286" text-anchor="middle" font-size="10" fill="var(--muted)">775–778 Gb/s full-duplex</text>
+    <rect x="390" y="247" width="180" height="46" rx="10" fill="var(--n0)"/>
+    <text x="480" y="268" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">rail gpu1p0 · NUMA 0</text>
+    <text x="480" y="284" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.85)" class="mono">PF 0002:03:00.0 · 400G</text>
+    <rect x="204" y="261" width="18" height="18" rx="3" fill="var(--purple)"/>
+    <rect x="738" y="261" width="18" height="18" rx="3" fill="var(--purple)"/>
+    <text x="196" y="275" text-anchor="end" font-size="10" fill="var(--purple-dark)" class="mono">VF 0002:03:00.2</text>
+    <text x="762" y="275" text-anchor="start" font-size="10" fill="var(--purple-dark)" class="mono">VF 0002:03:00.2</text>
+
+    <!-- ============ rail 2 · gpu2p0 · NUMA 1 ============ -->
+    <line x1="222" y1="340" x2="390" y2="340" stroke="var(--n1)" stroke-width="3.5"/>
+    <line x1="570" y1="340" x2="738" y2="340" stroke="var(--n1)" stroke-width="3.5"/>
+    <text x="306" y="330" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--n1-dark)">390 Gb/s one-way</text>
+    <text x="306" y="356" text-anchor="middle" font-size="10" fill="var(--muted)">525–578 Gb/s full-duplex</text>
+    <rect x="390" y="317" width="180" height="46" rx="10" fill="var(--n1)"/>
+    <text x="480" y="338" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">rail gpu2p0 · NUMA 1</text>
+    <text x="480" y="354" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.85)" class="mono">PF 0010:03:00.0 · 400G</text>
+    <rect x="204" y="331" width="18" height="18" rx="3" fill="var(--purple)"/>
+    <rect x="738" y="331" width="18" height="18" rx="3" fill="var(--purple)"/>
+    <text x="196" y="345" text-anchor="end" font-size="10" fill="var(--purple-dark)" class="mono">VF 0010:03:00.2</text>
+    <text x="762" y="345" text-anchor="start" font-size="10" fill="var(--purple-dark)" class="mono">VF 0010:03:00.2</text>
+
+    <!-- ============ rail 3 · gpu3p0 · NUMA 1 ============ -->
+    <line x1="222" y1="410" x2="390" y2="410" stroke="var(--n1)" stroke-width="3.5"/>
+    <line x1="570" y1="410" x2="738" y2="410" stroke="var(--n1)" stroke-width="3.5"/>
+    <text x="306" y="400" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--n1-dark)">390 Gb/s one-way</text>
+    <text x="306" y="426" text-anchor="middle" font-size="10" fill="var(--muted)">525–578 Gb/s full-duplex</text>
+    <rect x="390" y="387" width="180" height="46" rx="10" fill="var(--n1)"/>
+    <text x="480" y="408" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">rail gpu3p0 · NUMA 1</text>
+    <text x="480" y="424" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.85)" class="mono">PF 0012:03:00.0 · 400G</text>
+    <rect x="204" y="401" width="18" height="18" rx="3" fill="var(--purple)"/>
+    <rect x="738" y="401" width="18" height="18" rx="3" fill="var(--purple)"/>
+    <text x="196" y="415" text-anchor="end" font-size="10" fill="var(--purple-dark)" class="mono">VF 0012:03:00.2</text>
+    <text x="762" y="415" text-anchor="start" font-size="10" fill="var(--purple-dark)" class="mono">VF 0012:03:00.2</text>
+
+    <!-- title inside SVG top area -->
+    <text x="480" y="40" text-anchor="middle" font-size="13" font-weight="700" fill="#374151">four independent 400G wires — one CX-8 VF pair per rail</text>
+    <text x="480" y="58" text-anchor="middle" font-size="11" fill="var(--muted)">wires colored by worker NUMA node of the rail NIC · no bond/LAG/ECMP</text>
+  </svg>
+
+  <div class="stats">
+    <div class="stat"><div class="v">1,560.84 Gb/s</div><div class="l">4-rail concurrent one-way — full line rate (390.08–390.28 per rail, 97.6% of 400G)</div></div>
+    <div class="stat"><div class="v">~2,656 Gb/s</div><div class="l">4-rail concurrent bidirectional aggregate</div></div>
+    <div class="stat"><div class="v">1,560.63 Gb/s</div><div class="l">GPUDirect 4-rail (buffers split across both GPUs)</div></div>
+    <div class="stat"><div class="v">2.34–3.23 µs</div><div class="l">write latency — 2.34–2.38 NUMA-0 · 3.15–3.23 NUMA-1 (cross-socket)</div></div>
+  </div>
+
+  <p class="note">
+    Each wire is an independent RDMA stream (no bond/LAG/ECMP). NUMA-1 rails carry ~0.8 µs
+    cross-socket DMA penalty, which is why their full-duplex throughput settles lower.
+    The port-1 PFs — a second 400G plane per GPU for dual-plane 800G — are idle (deferred
+    profile change). Guest test networking (192.0.2.x /30s) and host PF MTU 9000 are
+    runtime-only lab settings.
+  </p>
+</main>
+</body>
+</html>

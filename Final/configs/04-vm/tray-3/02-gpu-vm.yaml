@@ -20,7 +20,7 @@ spec:
         machine:
           type: virt
         cpu:
-          cores: 2
+          cores: 4
           dedicatedCpuPlacement: true
           numa:
             guestMappingPassthrough: {}
