@@ -2,7 +2,16 @@
 
 These ConfigMaps are management-cluster inputs to the existing
 `clusters/my-hosted-cluster` NodePool. Do not apply the embedded KubeletConfig or
-MachineConfig directly to a guest MachineConfigPool.
+MachineConfig directly to a guest MachineConfigPool — the guest has no MCO and
+ignores them. The general wrapper/reference mechanism is documented in
+`02-hcp-hosted-cluster.md` §2.5, with a generic example in
+`machineconfig-example-configmap.yaml`.
+
+Red Hat docs (OCP 4.22):
+- Configuring node pools (NodePool.spec.config mechanism):
+  https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#configuring-node-pools-for-hcp_hcp-machine-config
+- Referencing the kubelet configuration in node pools:
+  https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#hcp-kubeconf-nodepool_hcp-machine-config
 
 - `vm-host-kubelet-config.yaml`: static CPU Manager, restricted topology policy,
   and one CPU reserved in total (500m kube-reserved + 500m system-reserved).

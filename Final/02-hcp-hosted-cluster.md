@@ -1,11 +1,16 @@
 # 2 — HCP: hub + hosted ARM64 cluster
 
-Create the hosted control plane, boot the ARM64 workers from it, then tune
-the workers for GPU VM hosting. Reference manifests: `configs/01-hcp/`
-(`hostedcluster.yaml`, `nodepool.yaml`, `infraenv.yaml`,
-`vm-host-tuning.md`). Prerequisites: a prepared hub —
+Create the hosted control plane, boot the ARM64 workers from it, manage
+their NodePools and node configuration, then tune the workers for GPU VM
+hosting. Reference manifests: `configs/01-hcp/` (`hostedcluster.yaml`,
+`nodepool.yaml`, `nodepool-gpu-vm-workers.yaml`, `infraenv.yaml`,
+`machineconfig-example-configmap.yaml`, `vm-host-tuning.md`).
+Prerequisites: a prepared hub —
 [Chapter 1](01-prerequisites.md) or [Appendix C](appendix-c-hub-setup.md)
 if building one from zero.
+
+All `oc`/`hcp` operations in §2.1–2.6 and §2.8 run against the **hub**
+kubeconfig unless stated otherwise.
 
 ## 2.1 Create the hosted cluster
 
@@ -42,6 +47,20 @@ Two ARM64/multi-arch requirements baked into that command:
 - **Base domain must be hyphenated** (`172-16-2-132.sslip.io`); the dotted
   form is rejected as an invalid DNS label.
 
+This creates the `HostedCluster`, the initial `NodePool`
+(`configs/01-hcp/nodepool.yaml`) and the `InfraEnv`
+(`configs/01-hcp/infraenv.yaml`) in namespace `clusters`. Wait for the
+control plane to settle before booting workers:
+
+```bash
+oc -n clusters get hostedcluster my-hosted-cluster \
+  -o jsonpath='{range .status.conditions[*]}{.type}{"="}{.status}{"\n"}{end}'
+# HostedClusterFleetAvailable, ValidHostedClusterCapabilities, etc. = True
+```
+
+> **Red Hat docs (OCP 4.22):**
+> [Deploying hosted control planes on bare metal with the Agent platform — creating a hosted cluster by using the CLI](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-deploy/hcp-deploy-bm.html#hcp-bm-hc-create_hcp-deploy-bm)
+
 ## 2.2 Boot the workers (InfraEnv + discovery ISO)
 
 ```bash
@@ -50,14 +69,48 @@ oc get infraenv my-hosted-cluster -n clusters \
 ```
 
 Boot each GB300 tray from the discovery ISO (virtual media via the BMC).
-The host registers as an Agent in namespace `clusters`; HCP binds it to the
-NodePool and ignites it into an RHCOS 10.2 worker. Scale the NodePool /
-approve agents until you have the desired workers (this build ended with
-three Ready workers: `compute-tray-3`, `compute-tray-11`, `compute-tray-12`).
+The host registers as an **Agent** CR in namespace `clusters`.
+
+> **Red Hat docs (OCP 4.22):**
+> [Deploying hosted control planes on bare metal — creating a host inventory (InfraEnv)](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-deploy/hcp-deploy-bm.html#hcp-bm-infraenv_hcp-deploy-bm)
 
 **UEFI boot order check:** ensure each worker's boot order starts with the
 local Red Hat disk and that RHCOS is the default entry, so a reboot cannot
 select the lab's unrelated Ubuntu autoinstall PXE target.
+
+### Approve each Agent
+
+An Agent binds to a NodePool only after it is approved. Before approving,
+verify its validations — an agent is bindable when `Connected=True`,
+`Validated=True` and `Bound=False`; `RequirementsMet=False` with reason
+`AgentIsNotApproved` means approval is the only remaining step:
+
+```bash
+oc -n clusters get agents
+oc -n clusters get agent <agent-name> -o yaml   # status.conditions + validationsInfo
+```
+
+Check `validationsInfo` for `connected`, `has-inventory`,
+`has-min-cpu-cores`, `has-min-memory`, `has-min-valid-disks` and the NTP
+check. Then approve:
+
+```bash
+oc -n clusters patch agent <agent-name> --type=merge \
+  -p '{"spec":{"approved":true}}'
+```
+
+Approval permits selection — it does not force binding or bypass
+validations. If the host picked the wrong installation disk or hostname,
+set `spec.installation_disk_id` / `spec.hostname` on the Agent instead of
+re-provisioning. HCP then binds the Agent, ignites it into an RHCOS 10.2
+worker and the NodePool counts it toward its replicas (this build ended
+with three Ready workers: `compute-tray-3`, `compute-tray-11`,
+`compute-tray-12`). Agent lifecycle states are documented as
+`binding → discovering → insufficient → installing →
+installing-in-progress → added-to-existing-cluster`.
+
+> **Red Hat docs (OCP 4.22):**
+> [Managing hosted control planes on bare metal — scaling the NodePool object (Agent states and approval)](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-manage/hcp-manage-bm.html#hcp-bm-scale-np_hcp-manage-bm)
 
 ## 2.3 Get the managed (hosted cluster) kubeconfig
 
@@ -70,13 +123,133 @@ oc get nodes    # all workers Ready
 
 All later chapters use this managed kubeconfig unless stated otherwise.
 
-## 2.4 Worker host tuning for GPU VMs
+> **Red Hat docs (OCP 4.22):**
+> [Managing hosted control planes on bare metal — accessing the hosted cluster](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-manage/hcp-manage-bm.html#hcp-bm-access_hcp-manage-bm)
+
+## 2.4 NodePool management
+
+The `--node-pool-replicas 1` flag created one initial NodePool. All
+NodePool operations happen on the hub, in the HostedCluster's namespace.
+There is **one Agent namespace per hosted cluster**: additional pools draw
+from the same namespace and use an `agentLabelSelector` on the pool to
+claim the right Agents.
+
+### Create an additional NodePool
+
+Reference manifest: `configs/01-hcp/nodepool-gpu-vm-workers.yaml`. Either
+apply it directly, or render with the CLI, edit, then apply:
+
+```bash
+./hcp create nodepool agent \
+  --namespace clusters \
+  --cluster-name my-hosted-cluster \
+  --name my-hosted-cluster-gpu-vm-workers \
+  --node-count 0 \
+  --node-upgrade-type InPlace \
+  --render > gpu-vm-workers-nodepool.yaml
+# edit: arch, nodeLabels, taints, agentLabelSelector, config refs
+oc apply -f gpu-vm-workers-nodepool.yaml
+```
+
+Key fields:
+
+- `spec.clusterName` — the **HostedCluster's** name, not the pool's name.
+- `spec.nodeLabels` / `spec.taints` — labels/taints applied to the guest
+  `Node` objects (e.g. `dedicated=gpu-vm-host:NoSchedule` for a VM-host
+  pool; VM workloads then tolerate the taint).
+- `spec.platform.agent.agentLabelSelector` — selects **Agent CRs by their
+  metadata labels** to partition hosts between pools; it does *not* label
+  guest Nodes. Label the Agents after they register:
+  `oc -n clusters label agent <agent-name> pool=gpu-vm-workers`.
+- `spec.config` — config inputs are **not inherited** from other pools;
+  re-attach anything this pool needs (§2.5).
+- `spec.release.image` — must match the HostedCluster's payload family and
+  never run ahead of the control plane.
+- `spec.management.upgradeType` — **immutable** after creation; keep
+  `InPlace` with `inPlace.maxUnavailable: 1`.
+
+> **Red Hat docs (OCP 4.22):**
+> [Managing hosted control planes on bare metal — adding node pools](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-manage/hcp-manage-bm.html#hcp-bm-add-np_hcp-manage-bm)
+> (NodePool field reference: [hypershift API types, release-4.22](https://github.com/openshift/hypershift/blob/release-4.22/api/hypershift/v1beta1/nodepool_types.go))
+
+### Scale a NodePool (fixed size)
+
+```bash
+oc -n clusters scale nodepool my-hosted-cluster --replicas=3
+```
+
+Scaling up consumes approved, unbound Agents matching the pool's
+requirements. Scaling down **unbinds** the surplus Agents (their Nodes are
+removed from the guest cluster); to reuse such a host, restart it with the
+discovery ISO and re-approve the fresh Agent. `autoRepair: false` means
+decommissioned workers are not automatically re-provisioned.
+
+> **Red Hat docs (OCP 4.22):**
+> [Managing hosted control planes on bare metal — scaling the NodePool object for a hosted cluster](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-manage/hcp-manage-bm.html#hcp-bm-scale-np_hcp-manage-bm)
+
+### Autoscaling
+
+`spec.replicas` and `spec.autoScaling` are mutually exclusive — remove
+`replicas` and set the bounds in the same update:
+
+```bash
+oc -n clusters patch nodepool my-hosted-cluster --type=merge \
+  -p '{"spec":{"replicas":null,"autoScaling":{"min":2,"max":5}}}'
+```
+
+Agent-platform caveats: `min` must be ≥ 1 (no scale-from-zero), autoscaling
+is bounded by *available eligible Agents* (it cannot create hardware), and
+for HA platform operators the sum of minimum replicas across non-tainted
+pools must be ≥ 2 (not applicable to this SingleReplica build).
+
+> **Red Hat docs (OCP 4.22):**
+> [Managing hosted control planes on bare metal — enabling node auto-scaling](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-manage/hcp-manage-bm.html#hcp-bm-autoscale_hcp-manage-bm),
+> [NodePool autoscaling configuration reference](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#hcp-autoscaling-nodepool-reference_hcp-machine-config)
+
+## 2.5 MachineConfig / KubeletConfig in a hosted cluster
+
+A hosted cluster has **no MachineConfigPool and no Machine Config
+Operator** — the guest ignores standalone `MachineConfig`,
+`KubeletConfig` or `MachineConfigPool` objects applied directly to it (a
+common failure when porting standalone-OpenShift procedures). The only
+supported path is:
+
+1. Wrap the serialized resource in a **ConfigMap on the hub**, in the
+   NodePool's namespace, under `data.config` (see
+   `vm-host-kubelet-config.yaml`, `vm-host-hugepages.yaml` and the generic
+   `machineconfig-example-configmap.yaml`).
+2. Reference the ConfigMap name in `NodePool.spec.config`:
+
+   ```bash
+   oc -n clusters patch nodepool my-hosted-cluster --type=merge \
+     -p '{"spec":{"config":[{"name":"vm-host-chrony"}]}}'
+   ```
+
+   Merge with existing entries — never replace the list blindly, and keep
+   the OS-image reference (e.g. `custom-machineconfig-v2`) that may
+   already be present.
+3. The change triggers an **InPlace rollout of the entire pool**
+   (cordon → drain → apply → reboot → uncordon), one worker at a time with
+   `maxUnavailable: 1`. Schedule VM maintenance first.
+
+Both `kind: KubeletConfig` and `kind: MachineConfig` (with Ignition
+content under `spec.config`) work through this wrapper. Every later
+reference change re-triggers a rollout — treat the `NodePool.spec.config`
+list as code, review it like a node reboot.
+
+> **Red Hat docs (OCP 4.22):**
+> [Handling machine configuration for hosted control planes — configuring node pools](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#configuring-node-pools-for-hcp_hcp-machine-config),
+> [referencing kubelet configuration in node pools](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#hcp-kubeconf-nodepool_hcp-machine-config),
+> [configuring the NTP server (chrony) for hosted clusters](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#hcp-configure-ntp_hcp-machine-config)
+
+## 2.6 Worker host tuning for GPU VMs
 
 The workers need kubelet and hugepage tuning **before** scheduling GPU VMs.
 The inputs are management-cluster ConfigMaps appended to
-`NodePool.spec.config` (see `configs/01-hcp/vm-host-tuning.md` for the full
-procedure and safeguards). Do **not** apply the embedded KubeletConfig or
-MachineConfig directly to a guest MachineConfigPool.
+`NodePool.spec.config` (the §2.5 mechanism; see
+`configs/01-hcp/vm-host-tuning.md` for the full procedure and safeguards).
+Do **not** apply the embedded KubeletConfig or MachineConfig directly to a
+guest MachineConfigPool.
 
 - **KubeletConfig** (`vm-host-kubelet-config.yaml`): static CPU Manager,
   `restricted` topology-manager policy, one CPU reserved in total (500m
@@ -105,7 +278,14 @@ Rollout discipline (from the hard-won guidance in
    `nvidia.com/31c2` resources advertised once the GPU operator is
    installed (Chapter 4).
 
-## 2.5 Host NIC state used by the RDMA chapters
+> **Red Hat docs (OCP 4.22):** the kubelet-configuration-through-NodePool
+> mechanism is documented in
+> [referencing the kubelet configuration in node pools](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#hcp-kubeconf-nodepool_hcp-machine-config);
+> the KubeletConfig fields themselves (`cpuManagerPolicy`,
+> `topologyManagerPolicy`, `kubeReserved`, …) are the standard
+> `machineconfiguration.openshift.io` KubeletConfig fields.
+
+## 2.7 Host NIC state used by the RDMA chapters
 
 Each worker has eight CX-8 PFs at 400G. The four PFs used as RDMA rails
 (see diagram in the [overview](README.md)) are `0000:03:00.0`,
@@ -113,3 +293,61 @@ Each worker has eight CX-8 PFs at 400G. The four PFs used as RDMA rails
 carry **no host networking** (no IPv4), which makes later MTU changes safe.
 VF provisioning on these PFs is done in
 [Chapter 7](07-cx8-rdma-rails.md).
+
+## 2.8 Lifecycle: upgrades, pausing, teardown
+
+**Version upgrades** (e.g. 4.22.x → 4.22.y) patch release images — there is
+no `hcp upgrade` command. Control plane first, then each NodePool:
+
+```bash
+RELEASE=quay.io/openshift-release-dev/ocp-release:4.22.19-multi
+
+oc -n clusters patch hostedcluster my-hosted-cluster --type=merge \
+  -p "{\"spec\":{\"release\":{\"image\":\"${RELEASE}\"}}}"
+# wait for the control plane to update and report healthy, then:
+oc -n clusters patch nodepool my-hosted-cluster --type=merge \
+  -p "{\"spec\":{\"release\":{\"image\":\"${RELEASE}\"}}}"
+```
+
+Changing the HostedCluster's release does **not** cascade to existing
+NodePools. The InPlace upgrader reuses the same machines, rolling through
+the pool up to `spec.management.inPlace.maxUnavailable` (default 1);
+monitor `NodePool.status.version` and the `UpdatingVersion` /
+`UpdatingConfig` conditions. Keep the §2.6 maintenance safeguards (VM
+runStrategy, UEFI boot order) in mind — an upgrade reboots every worker.
+
+> **Red Hat docs (OCP 4.22):**
+> [Updating hosted control planes — updating a control plane](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-updating.html#hcp-update-ocp-hc_hcp-updating),
+> [updating node pools](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-updating.html#hcp-update-node-pools_hcp-updating),
+> [hosted cluster and node pool version skew policy](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-updating.html#hcp-np-version-skew_hcp-updating)
+
+**Pause reconciliation** during maintenance with `spec.pausedUntil`
+(a string, not a boolean; both objects accept it):
+
+```bash
+oc -n clusters patch hostedcluster my-hosted-cluster --type=merge \
+  -p '{"spec":{"pausedUntil":"true"}}'
+oc -n clusters patch nodepool my-hosted-cluster --type=merge \
+  -p '{"spec":{"pausedUntil":"true"}}'
+# resume:
+oc -n clusters patch hostedcluster my-hosted-cluster --type=merge \
+  -p '{"spec":{"pausedUntil":null}}'
+```
+
+This pauses reconciliation — it does not stop running control-plane pods
+or cancel an already-running node update.
+
+> **Red Hat docs (OCP 4.22):**
+> [Troubleshooting hosted control planes — pausing hosted cluster reconciliation](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-troubleshooting.html#hosted-control-planes-pause-reconciliation_hcp-troubleshooting)
+
+**Teardown** (lab only — destroys the hosted cluster, its control plane
+and etcd PVC; scale NodePools to 0 first and halt VMs if reusing hosts):
+
+```bash
+./hcp destroy cluster agent \
+  --name my-hosted-cluster \
+  --namespace clusters
+```
+
+> **Red Hat docs (OCP 4.22):**
+> [Destroying a hosted cluster on bare metal by using the CLI](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-destroy/hcp-destroy-bm.html#destroy-hc-bm-cli_hcp-destroy-bm)

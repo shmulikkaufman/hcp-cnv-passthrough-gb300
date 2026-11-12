@@ -102,7 +102,7 @@ Validated results (details and per-test evidence in
 |---|---|---|
 | — | [Overview (this file)](README.md) | background, infra diagram, end-state, menu |
 | 1 | [Prerequisites](01-prerequisites.md) | hardware, hub cluster, CLIs, pull secret, fabric inputs |
-| 2 | [HCP hosted cluster](02-hcp-hosted-cluster.md) | hub + hosted arm64 cluster, worker boot, host tuning |
+| 2 | [HCP hosted cluster](02-hcp-hosted-cluster.md) | hub + hosted arm64 cluster, worker boot & agent approval, NodePools, MachineConfig in HCP, host tuning, upgrades |
 | 3 | [OpenShift Virtualization + AIE](03-openshift-virtualization-aie.md) | CNV operator, AIE enablement, NV launcher selection |
 | 4 | [GPU operator (vm-passthrough)](04-gpu-operator-vm-passthrough.md) | ClusterPolicy, device whitelist |
 | 5 | [GPU VM provisioning](05-gpu-vm-provisioning.md) | storage, VM spec (final profile), SSH services |
@@ -120,7 +120,7 @@ configurations** — everything applied in the validated end state:
 
 | Path | Contents |
 |---|---|
-| `configs/01-hcp/` | hosted-cluster/nodepool/infraenv references, worker host tuning |
+| `configs/01-hcp/` | hosted-cluster/nodepool/infraenv references, additional NodePool example, MachineConfig wrapper example, worker host tuning |
 | `configs/02-cnv/` | CNV operator manifests, AIE launcher config, HCP placement patches |
 | `configs/03-gpu-operator/` | operator subscription, ClusterPolicy, CNV whitelist |
 | `configs/04-vm/` | VM namespace, DataVolumes, VM manifests (per-tray subdirs), SSH services |

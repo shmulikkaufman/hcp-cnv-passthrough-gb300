@@ -1,0 +1,59 @@
+# Reference manifest: an ADDITIONAL Agent-platform NodePool attached to the
+# existing `my-hosted-cluster` HostedCluster. The initial pool
+# (nodepool.yaml) is auto-created by `hcp create cluster agent`; this shows
+# how to carve out a dedicated pool — e.g. GPU-VM hosts — with its own
+# labels, taints and config inputs.
+#
+# Apply on the HUB, in the same namespace as the HostedCluster. Nothing is
+# inherited from the existing pool: nodeLabels, taints and every
+# spec.config entry must be (re)declared here. Every change to spec.config
+# triggers an InPlace rollout of the whole pool.
+apiVersion: hypershift.openshift.io/v1beta1
+kind: NodePool
+metadata:
+  name: my-hosted-cluster-gpu-vm-workers
+  namespace: clusters
+spec:
+  clusterName: my-hosted-cluster   # the HostedCluster's name, not the pool's
+  arch: arm64
+  replicas: 0                      # scale up as agents become available
+  nodeLabels:
+    node-role.kubernetes.io/gpu-vm-host: ""
+    workload-type: gpu-vm
+  taints:
+  - key: dedicated
+    value: gpu-vm-host
+    effect: NoSchedule
+  management:
+    autoRepair: false
+    upgradeType: InPlace           # immutable after creation
+    inPlace:
+      maxUnavailable: 1            # roll one worker at a time
+  platform:
+    type: Agent
+    agent:
+      # Selects Agent CRs by their metadata labels — the mechanism that
+      # partitions hosts between NodePools when more than one pool exists.
+      # Labels are set on the Agent after it registers (or via InfraEnv
+      # nmStateConfigLabelSelector flows). It does NOT label guest Nodes;
+      # use nodeLabels above for that.
+      agentLabelSelector:
+        matchLabels:
+          pool: gpu-vm-workers
+  config:
+  # Config inputs live on the HUB as ConfigMaps in this namespace and are
+  # NOT shared with the initial NodePool — re-attach anything this pool
+  # needs (see 02-hcp-hosted-cluster.md §2.5 for the mechanism).
+  # - name: vm-host-kubelet-config
+  # - name: vm-host-hugepages
+  release:
+    # Must match the HostedCluster's payload family; multi-arch for arm64
+    # workers with an x86_64 control plane. Never run a NodePool release
+    # ahead of the HostedCluster's control plane.
+    image: quay.io/openshift-release-dev/ocp-release:4.22.0-multi
+
+# Red Hat docs (OCP 4.22):
+#   Adding node pools (agent platform):
+#     https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-manage/hcp-manage-bm.html#hcp-bm-add-np_hcp-manage-bm
+#   NodePool API field reference (upstream hypershift, release-4.22):
+#     https://github.com/openshift/hypershift/blob/release-4.22/api/hypershift/v1beta1/nodepool_types.go

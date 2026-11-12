@@ -1,0 +1,55 @@
+# Example of the MachineConfig-in-HCP wrapper pattern (the mechanism is
+# documented in 02-hcp-hosted-cluster.md §2.5).
+#
+# In a hosted cluster there is no MCO and no MachineConfigPool: the ONLY
+# supported way to deliver a MachineConfig or KubeletConfig to guest nodes
+# is a ConfigMap on the HUB (same namespace as the NodePool) whose
+# data.config holds the serialized resource, referenced from
+# NodePool.spec.config. Applying a MachineConfig directly in the guest
+# cluster does nothing.
+#
+# This example points chronyd at a lab NTP server — the Agent NTP
+# validation is one of the checks that must pass before approval, and
+# clock skew breaks TLS/etcd on the workers.
+#
+# 1. Apply on the HUB:      oc apply -f machineconfig-example-configmap.yaml
+# 2. Reference it from the NodePool:
+#      oc -n clusters patch nodepool my-hosted-cluster --type=merge \
+#        -p '{"spec":{"config":[{"name":"vm-host-chrony"}]}}'
+#    (merge with any existing entries — do not replace the list blindly;
+#     keep the OS-image reference such as custom-machineconfig-v2)
+# 3. The patch triggers an InPlace rollout of the pool (cordon/drain/
+#    reboot), one worker at a time with maxUnavailable: 1.
+#
+# Red Hat docs (OCP 4.22) — this exact procedure (chrony via Butane ->
+# MachineConfig -> ConfigMap -> NodePool.spec.config) plus the simpler
+# InfraEnv.spec.additionalNTPSources alternative for discovery-time NTP:
+#   https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#hcp-configure-ntp_hcp-machine-config
+# General node-pool config mechanism:
+#   https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#configuring-node-pools-for-hcp_hcp-machine-config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vm-host-chrony
+  namespace: clusters
+data:
+  config: |
+    apiVersion: machineconfiguration.openshift.io/v1
+    kind: MachineConfig
+    metadata:
+      name: 99-vm-host-chrony
+    spec:
+      config:
+        ignition:
+          version: 3.4.0
+        storage:
+          files:
+          - path: /etc/chrony.conf
+            mode: 0644
+            overwrite: true
+            # base64 of:
+            #   pool ntp.lab.example.com iburst
+            #   driftfile /var/lib/chrony/drift
+            #   makestep 1.0 3
+            contents:
+              source: data:text/plain;charset=utf-8;base64,cG9vbCBudHAubGFiLmV4YW1wbGUuY29tIGlidXJzdApkcmlmdGZpbGUgL3Zhci9saWIvY2hyb255L2RyaWZ0Cm1ha2VzdGVwIDEuMCAzCg==

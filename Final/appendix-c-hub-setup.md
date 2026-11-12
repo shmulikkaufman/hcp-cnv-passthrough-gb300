@@ -129,6 +129,9 @@ Keep `oc` and `virtctl` at versions compatible with the hosted cluster
 (4.22 here); `virtctl` comes from the CNV release mirrored on the console
 downloads page.
 
+> **Red Hat docs (OCP 4.22):**
+> [Installing the hosted control planes command-line interface](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-prepare/hcp-cli.html)
+
 ## C.5 Readiness checklist (gate before Chapter 2)
 
 ```bash
