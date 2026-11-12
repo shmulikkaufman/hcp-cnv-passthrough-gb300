@@ -38,7 +38,7 @@ A topology diagram of the VMs, the four wires and their bandwidths is in
 | Path | Contents |
 |---|---|
 | [`Final/`](Final/README.md) | the consolidated build guide (10 chapters + appendices A/B) |
-| `Final/configs/` | **only the final, working configurations** |
+| [`Final/configs/`](Final/configs/) | **only the final, working configurations** |
 | [`archive/`](archive/README.md) | superseded/historical material — never needed to rebuild |
 | `scripts/` | convenience environment script |
 | `rdma-gb300.html` | external reference document (gitignored, not for publication) |

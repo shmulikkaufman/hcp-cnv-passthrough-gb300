@@ -2,9 +2,14 @@
 
 Create the hosted control plane, boot the ARM64 workers from it, manage
 their NodePools and node configuration, then tune the workers for GPU VM
-hosting. Reference manifests: `configs/01-hcp/` (`hostedcluster.yaml`,
-`nodepool.yaml`, `nodepool-gpu-vm-workers.yaml`, `infraenv.yaml`,
-`machineconfig-example-configmap.yaml`, `vm-host-tuning.md`).
+hosting. Reference manifests in
+[`configs/01-hcp/`](configs/01-hcp/):
+[`hostedcluster.yaml`](configs/01-hcp/hostedcluster.yaml),
+[`nodepool.yaml`](configs/01-hcp/nodepool.yaml),
+[`nodepool-gpu-vm-workers.yaml`](configs/01-hcp/nodepool-gpu-vm-workers.yaml),
+[`infraenv.yaml`](configs/01-hcp/infraenv.yaml),
+[`machineconfig-example-configmap.yaml`](configs/01-hcp/machineconfig-example-configmap.yaml),
+[`vm-host-tuning.md`](configs/01-hcp/vm-host-tuning.md).
 Prerequisites: a prepared hub —
 [Chapter 1](01-prerequisites.md) or [Appendix C](appendix-c-hub-setup.md)
 if building one from zero.
@@ -48,8 +53,9 @@ Two ARM64/multi-arch requirements baked into that command:
   form is rejected as an invalid DNS label.
 
 This creates the `HostedCluster`, the initial `NodePool`
-(`configs/01-hcp/nodepool.yaml`) and the `InfraEnv`
-(`configs/01-hcp/infraenv.yaml`) in namespace `clusters`. Wait for the
+([`configs/01-hcp/nodepool.yaml`](configs/01-hcp/nodepool.yaml)) and the
+`InfraEnv` ([`configs/01-hcp/infraenv.yaml`](configs/01-hcp/infraenv.yaml))
+in namespace `clusters`. Wait for the
 control plane to settle before booting workers:
 
 ```bash
@@ -137,8 +143,9 @@ claim the right Agents.
 
 ### Create an additional NodePool
 
-Reference manifest: `configs/01-hcp/nodepool-gpu-vm-workers.yaml`. Either
-apply it directly, or render with the CLI, edit, then apply:
+Reference manifest:
+[`configs/01-hcp/nodepool-gpu-vm-workers.yaml`](configs/01-hcp/nodepool-gpu-vm-workers.yaml).
+Either apply it directly, or render with the CLI, edit, then apply:
 
 ```bash
 ./hcp create nodepool agent \
@@ -218,8 +225,10 @@ supported path is:
 
 1. Wrap the serialized resource in a **ConfigMap on the hub**, in the
    NodePool's namespace, under `data.config` (see
-   `vm-host-kubelet-config.yaml`, `vm-host-hugepages.yaml` and the generic
-   `machineconfig-example-configmap.yaml`).
+   [`vm-host-kubelet-config.yaml`](configs/01-hcp/vm-host-kubelet-config.yaml),
+   [`vm-host-hugepages.yaml`](configs/01-hcp/vm-host-hugepages.yaml) and
+   the generic
+   [`machineconfig-example-configmap.yaml`](configs/01-hcp/machineconfig-example-configmap.yaml)).
 2. Reference the ConfigMap name in `NodePool.spec.config`:
 
    ```bash
@@ -255,13 +264,15 @@ list as code, review it like a node reboot.
 The workers need kubelet and hugepage tuning **before** scheduling GPU VMs.
 The inputs are management-cluster ConfigMaps appended to
 `NodePool.spec.config` (the §2.5 mechanism; see
-`configs/01-hcp/vm-host-tuning.md` for the full procedure and safeguards).
+[`configs/01-hcp/vm-host-tuning.md`](configs/01-hcp/vm-host-tuning.md) for
+the full procedure and safeguards).
 Do **not** apply the embedded KubeletConfig or MachineConfig directly to a
 guest MachineConfigPool.
 
-- **KubeletConfig** (`vm-host-kubelet-config.yaml`): static CPU Manager,
-  `restricted` topology-manager policy, one CPU reserved in total (500m
-  kube-reserved + 500m system-reserved), and
+- **KubeletConfig**
+  ([`vm-host-kubelet-config.yaml`](configs/01-hcp/vm-host-kubelet-config.yaml)):
+  static CPU Manager, `restricted` topology-manager policy, one CPU
+  reserved in total (500m kube-reserved + 500m system-reserved), and
   **`max-allowable-numa-nodes: "34"`**.
 
   ⚙ **CUSTOM CONFIGURATION — NUMA node allowance.** The GB300 GPUs expose
@@ -270,13 +281,15 @@ guest MachineConfigPool.
   Raising the allowance to 34 accommodates the GPU NUMA topology. (Not
   needed on non-Grace hardware.)
 
-- **Hugepages** (`vm-host-hugepages.yaml`): persistent 2 MiB hugepages
+- **Hugepages**
+  ([`vm-host-hugepages.yaml`](configs/01-hcp/vm-host-hugepages.yaml)):
+  persistent 2 MiB hugepages
   before kubelet startup — 32768 pages (64 GiB) **per CPU-bearing NUMA
   node**; memory-only GPU NUMA nodes are deliberately excluded. The
   validated trays each have two CPU-bearing NUMA nodes.
 
 Rollout discipline (from the hard-won guidance in
-`configs/01-hcp/vm-host-tuning.md`):
+[`configs/01-hcp/vm-host-tuning.md`](configs/01-hcp/vm-host-tuning.md)):
 
 1. Save the live NodePool and referenced configs first.
 2. Roll out **one worker at a time** via the NodePool's InPlace controller;

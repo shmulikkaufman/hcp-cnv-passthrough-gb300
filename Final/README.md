@@ -120,13 +120,13 @@ configurations** — everything applied in the validated end state:
 
 | Path | Contents |
 |---|---|
-| `configs/01-hcp/` | hosted-cluster/nodepool/infraenv references, additional NodePool example, MachineConfig wrapper example, worker host tuning |
-| `configs/02-cnv/` | CNV operator manifests, AIE launcher config, HCP placement patches |
-| `configs/03-gpu-operator/` | operator subscription, ClusterPolicy, CNV whitelist |
-| `configs/04-vm/` | VM namespace, DataVolumes, VM manifests (per-tray subdirs), SSH services |
-| `configs/05-guest-driver/` | pinned in-guest driver install script |
-| `configs/06-cuda-test/` | CUDA driver-API probe, sample build/run scripts |
-| `configs/07-rdma/` | VF supply DaemonSet, shim source + DaemonSets, PCI guard, four-rail patches, test scripts |
+| [`configs/01-hcp/`](configs/01-hcp/) | hosted-cluster/nodepool/infraenv references, additional NodePool example, MachineConfig wrapper example, worker host tuning |
+| [`configs/02-cnv/`](configs/02-cnv/) | CNV operator manifests, AIE launcher config, HCP placement patches |
+| [`configs/03-gpu-operator/`](configs/03-gpu-operator/) | operator subscription, ClusterPolicy, CNV whitelist |
+| [`configs/04-vm/`](configs/04-vm/) | VM namespace, DataVolumes, VM manifests (per-tray subdirs), SSH services |
+| [`configs/05-guest-driver/`](configs/05-guest-driver/) | pinned in-guest driver install script |
+| [`configs/06-cuda-test/`](configs/06-cuda-test/) | CUDA driver-API probe, sample build/run scripts |
+| [`configs/07-rdma/`](configs/07-rdma/) | VF supply DaemonSet, shim source + DaemonSets, PCI guard, four-rail patches, test scripts |
 
 Superseded and historical material (retired components, two-rail-era
 patches, dated validation reports, discovery evidence) lives in

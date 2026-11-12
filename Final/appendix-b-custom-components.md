@@ -10,8 +10,8 @@ live.
 | Component | Where | Problem it solves | Chapter |
 |---|---|---|---|
 | Worker-only placement patches | `configs/02-cnv/patches/hcp-worker-placement.yaml`, `hcp-subscription-placement.yaml` | HCP workers carry no `master` label, so CNV deployments with default master affinity stay Pending | [3](03-openshift-virtualization-aie.md) |
-| KubeletConfig `max-allowable-numa-nodes: "34"` | `configs/01-hcp/` (NodePool inputs) | GB300 GPUs expose many memory-only NUMA nodes; the topology manager's default 8-node limit rejects GPU-VM pods under `restricted` policy | [2](02-hcp-hosted-cluster.md) |
-| Per-worker hugepage ConfigMap (64 GiB / CPU-NUMA-node) | `configs/01-hcp/` (NodePool inputs) | AIE's vSMMUv3/NUMA generation requires hugepage-backed guest memory; GPU NUMA nodes must be excluded | [2](02-hcp-hosted-cluster.md) |
+| KubeletConfig `max-allowable-numa-nodes: "34"` | [`vm-host-kubelet-config.yaml`](configs/01-hcp/vm-host-kubelet-config.yaml) (NodePool input) | GB300 GPUs expose many memory-only NUMA nodes; the topology manager's default 8-node limit rejects GPU-VM pods under `restricted` policy | [2](02-hcp-hosted-cluster.md) |
+| Per-worker hugepage ConfigMap (64 GiB / CPU-NUMA-node) | [`vm-host-hugepages.yaml`](configs/01-hcp/vm-host-hugepages.yaml) (NodePool input) | AIE's vSMMUv3/NUMA generation requires hugepage-backed guest memory; GPU NUMA nodes must be excluded | [2](02-hcp-hosted-cluster.md) |
 | `permittedHostDevices` with `externalResourceProvider: true` (GPU `10de:31c2`, CX-8 `15b3:101e`) | `configs/03-gpu-operator/04-...yaml` + HCO CR | resources are advertised by external device plugins (NVIDIA sandbox plugin, cx8-shim), not KubeVirt's internal plugin | [4](04-gpu-operator-vm-passthrough.md), [7](07-cx8-rdma-rails.md) |
 | **No SR-IOV policies** (operator installed, inventory only) | cluster state | the policy layer reboot-loops these workers (Appendix A.6); its function is replaced by the VF-supply DaemonSet | [7](07-cx8-rdma-rails.md) |
 

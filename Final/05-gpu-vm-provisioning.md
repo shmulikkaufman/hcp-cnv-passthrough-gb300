@@ -18,7 +18,7 @@ oc apply -f configs/04-vm/00-gpu-vm-namespace.yaml    # gpu-vm-test
 
 Storage here is static local-hostPath (no dynamic provisioning, no
 snapshots — plan rollbacks as offline disk copies, see
-`configs/01-hcp/vm-host-tuning.md`).
+[`configs/01-hcp/vm-host-tuning.md`](configs/01-hcp/vm-host-tuning.md)).
 
 On the target worker, create the backing directories with CDI-compatible
 ownership and SELinux:

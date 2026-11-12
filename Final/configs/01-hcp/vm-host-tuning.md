@@ -4,8 +4,9 @@ These ConfigMaps are management-cluster inputs to the existing
 `clusters/my-hosted-cluster` NodePool. Do not apply the embedded KubeletConfig or
 MachineConfig directly to a guest MachineConfigPool — the guest has no MCO and
 ignores them. The general wrapper/reference mechanism is documented in
-`02-hcp-hosted-cluster.md` §2.5, with a generic example in
-`machineconfig-example-configmap.yaml`.
+[02-hcp-hosted-cluster.md §2.5](../../02-hcp-hosted-cluster.md), with a
+generic example in
+[machineconfig-example-configmap.yaml](machineconfig-example-configmap.yaml).
 
 Red Hat docs (OCP 4.22):
 - Configuring node pools (NodePool.spec.config mechanism):
@@ -22,12 +23,14 @@ GitHub (upstream sources):
   rollout, maxUnavailable):
   https://github.com/openshift/hypershift/blob/release-4.22/docs/content/reference/nodepool-rollouts.md
 
-- `vm-host-kubelet-config.yaml`: static CPU Manager, restricted topology policy,
+- [vm-host-kubelet-config.yaml](vm-host-kubelet-config.yaml): static CPU
+  Manager, restricted topology policy,
   and one CPU reserved in total (500m kube-reserved + 500m system-reserved).
   Preserve `max-allowable-numa-nodes: "34"`: the GPUs expose additional
   memory-only NUMA nodes, so the default eight-node topology limit is insufficient.
-- `vm-host-hugepages.yaml`: persistent 2 MiB hugepages before kubelet startup,
-  32768 pages / 64 GiB per CPU-bearing NUMA node. Memory-only GPU NUMA nodes are
+- [vm-host-hugepages.yaml](vm-host-hugepages.yaml): persistent 2 MiB hugepages
+  before kubelet startup, 32768 pages / 64 GiB per CPU-bearing NUMA node.
+  Memory-only GPU NUMA nodes are
   deliberately excluded. The validated trays have two CPU-bearing NUMA nodes.
 
 Retain the existing `custom-machineconfig-v2` OS-image reference when appending
