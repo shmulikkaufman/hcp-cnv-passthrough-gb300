@@ -13,6 +13,15 @@ Red Hat docs (OCP 4.22):
 - Referencing the kubelet configuration in node pools:
   https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#hcp-kubeconf-nodepool_hcp-machine-config
 
+GitHub (upstream sources):
+- openshift-docs module — configuring node pools for HCP:
+  https://github.com/openshift/openshift-docs/blob/enterprise-4.22/modules/configuring-node-pools-for-hcp.adoc
+- openshift-docs module — kubelet config in node pools:
+  https://github.com/openshift/openshift-docs/blob/enterprise-4.22/modules/hcp-kubeconf-nodepool.adoc
+- hypershift NodePool rollouts reference (config-hash change -> InPlace
+  rollout, maxUnavailable):
+  https://github.com/openshift/hypershift/blob/release-4.22/docs/content/reference/nodepool-rollouts.md
+
 - `vm-host-kubelet-config.yaml`: static CPU Manager, restricted topology policy,
   and one CPU reserved in total (500m kube-reserved + 500m system-reserved).
   Preserve `max-allowable-numa-nodes: "34"`: the GPUs expose additional

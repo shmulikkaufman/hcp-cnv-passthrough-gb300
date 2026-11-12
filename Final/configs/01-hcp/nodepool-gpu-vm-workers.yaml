@@ -57,3 +57,8 @@ spec:
 #     https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-manage/hcp-manage-bm.html#hcp-bm-add-np_hcp-manage-bm
 #   NodePool API field reference (upstream hypershift, release-4.22):
 #     https://github.com/openshift/hypershift/blob/release-4.22/api/hypershift/v1beta1/nodepool_types.go
+# GitHub (upstream sources):
+#   Creating heterogeneous Agent NodePools (agentLabelSelector, config refs):
+#     https://github.com/openshift/hypershift/blob/release-4.22/docs/content/how-to/agent/create-heterogeneous-nodepools.md
+#   NodePool rollouts reference (config changes -> InPlace rollout):
+#     https://github.com/openshift/hypershift/blob/release-4.22/docs/content/reference/nodepool-rollouts.md

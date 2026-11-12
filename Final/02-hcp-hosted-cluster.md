@@ -111,6 +111,7 @@ installing-in-progress → added-to-existing-cluster`.
 
 > **Red Hat docs (OCP 4.22):**
 > [Managing hosted control planes on bare metal — scaling the NodePool object (Agent states and approval)](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-manage/hcp-manage-bm.html#hcp-bm-scale-np_hcp-manage-bm)
+> (GitHub upstream: [hypershift — create an Agent cluster](https://github.com/openshift/hypershift/blob/release-4.22/docs/content/how-to/agent/create-agent-cluster.md))
 
 ## 2.3 Get the managed (hosted cluster) kubeconfig
 
@@ -171,6 +172,7 @@ Key fields:
 > **Red Hat docs (OCP 4.22):**
 > [Managing hosted control planes on bare metal — adding node pools](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-manage/hcp-manage-bm.html#hcp-bm-add-np_hcp-manage-bm)
 > (NodePool field reference: [hypershift API types, release-4.22](https://github.com/openshift/hypershift/blob/release-4.22/api/hypershift/v1beta1/nodepool_types.go))
+> (GitHub upstream: [hypershift — creating heterogeneous Agent NodePools](https://github.com/openshift/hypershift/blob/release-4.22/docs/content/how-to/agent/create-heterogeneous-nodepools.md))
 
 ### Scale a NodePool (fixed size)
 
@@ -241,6 +243,12 @@ list as code, review it like a node reboot.
 > [Handling machine configuration for hosted control planes — configuring node pools](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#configuring-node-pools-for-hcp_hcp-machine-config),
 > [referencing kubelet configuration in node pools](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#hcp-kubeconf-nodepool_hcp-machine-config),
 > [configuring the NTP server (chrony) for hosted clusters](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#hcp-configure-ntp_hcp-machine-config)
+>
+> **GitHub (upstream sources, release-4.22):**
+> [openshift-docs — configuring node pools for HCP](https://github.com/openshift/openshift-docs/blob/enterprise-4.22/modules/configuring-node-pools-for-hcp.adoc),
+> [openshift-docs — kubelet config in node pools](https://github.com/openshift/openshift-docs/blob/enterprise-4.22/modules/hcp-kubeconf-nodepool.adoc),
+> [openshift-docs — NTP/chrony procedure](https://github.com/openshift/openshift-docs/blob/enterprise-4.22/modules/hcp-configure-ntp.adoc),
+> [hypershift — NodePool rollouts reference (how config updates roll out)](https://github.com/openshift/hypershift/blob/release-4.22/docs/content/reference/nodepool-rollouts.md)
 
 ## 2.6 Worker host tuning for GPU VMs
 
@@ -284,6 +292,9 @@ Rollout discipline (from the hard-won guidance in
 > the KubeletConfig fields themselves (`cpuManagerPolicy`,
 > `topologyManagerPolicy`, `kubeReserved`, …) are the standard
 > `machineconfiguration.openshift.io` KubeletConfig fields.
+> The InPlace rollout semantics (config-hash change → cordon/drain/reboot,
+> `maxUnavailable`) are specified in the upstream
+> [hypershift NodePool rollouts reference](https://github.com/openshift/hypershift/blob/release-4.22/docs/content/reference/nodepool-rollouts.md).
 
 ## 2.7 Host NIC state used by the RDMA chapters
 
@@ -320,6 +331,7 @@ runStrategy, UEFI boot order) in mind — an upgrade reboots every worker.
 > [Updating hosted control planes — updating a control plane](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-updating.html#hcp-update-ocp-hc_hcp-updating),
 > [updating node pools](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-updating.html#hcp-update-node-pools_hcp-updating),
 > [hosted cluster and node pool version skew policy](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-updating.html#hcp-np-version-skew_hcp-updating)
+> (GitHub upstream: [hypershift — upgrades how-to](https://github.com/openshift/hypershift/blob/release-4.22/docs/content/how-to/upgrades.md))
 
 **Pause reconciliation** during maintenance with `spec.pausedUntil`
 (a string, not a boolean; both objects accept it):
@@ -339,6 +351,7 @@ or cancel an already-running node update.
 
 > **Red Hat docs (OCP 4.22):**
 > [Troubleshooting hosted control planes — pausing hosted cluster reconciliation](https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-troubleshooting.html#hosted-control-planes-pause-reconciliation_hcp-troubleshooting)
+> (GitHub upstream: [hypershift — pause reconciliation how-to](https://github.com/openshift/hypershift/blob/release-4.22/docs/content/how-to/pause-reconciliation.md))
 
 **Teardown** (lab only — destroys the hosted cluster, its control plane
 and etcd PVC; scale NodePools to 0 first and halt VMs if reusing hosts):

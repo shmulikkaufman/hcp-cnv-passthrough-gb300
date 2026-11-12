@@ -27,6 +27,16 @@
 #   https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#hcp-configure-ntp_hcp-machine-config
 # General node-pool config mechanism:
 #   https://docs.openshift.com/container-platform/4.22/hosted_control_planes/hcp-machine-config.html#configuring-node-pools-for-hcp_hcp-machine-config
+#
+# GitHub (upstream sources):
+#   openshift-docs module for this procedure (NTP/chrony):
+#     https://github.com/openshift/openshift-docs/blob/enterprise-4.22/modules/hcp-configure-ntp.adoc
+#   openshift-docs module for the NodePool.spec.config mechanism:
+#     https://github.com/openshift/openshift-docs/blob/enterprise-4.22/modules/configuring-node-pools-for-hcp.adoc
+#   hypershift NodePool rollouts reference (config update -> rollout):
+#     https://github.com/openshift/hypershift/blob/release-4.22/docs/content/reference/nodepool-rollouts.md
+#   hypershift NodePool API types (spec.config field):
+#     https://github.com/openshift/hypershift/blob/release-4.22/api/hypershift/v1beta1/nodepool_types.go
 apiVersion: v1
 kind: ConfigMap
 metadata:
